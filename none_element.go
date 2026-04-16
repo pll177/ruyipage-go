@@ -3,7 +3,7 @@ package ruyipage
 import (
 	"time"
 
-	internalelements "ruyipage-go/internal/elements"
+	internalelements "github.com/pll177/ruyipage-go/internal/elements"
 )
 
 // NoneElement 是空元素兜底公开包装对象。

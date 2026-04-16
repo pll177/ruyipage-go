@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	internalpages "ruyipage-go/internal/pages"
-	internalunits "ruyipage-go/internal/units"
+	internalpages "github.com/pll177/ruyipage-go/internal/pages"
+	internalunits "github.com/pll177/ruyipage-go/internal/units"
 )
 
 // FirefoxBase 是页面、tab、frame 共享的公开页面基类包装层。

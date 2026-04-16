@@ -6,7 +6,7 @@ import (
 	"math/rand"
 	"time"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // MousePoint 表示鼠标轨迹中的二维点。

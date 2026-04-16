@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // RealmInfoData 表示 script.getRealms 返回的单个 realm。

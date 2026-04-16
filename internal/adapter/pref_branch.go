@@ -4,7 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // PrefBranch 是 nsIPrefBranch 的文件/Marionette 适配层。

@@ -1,6 +1,6 @@
 package ruyipage
 
-import "ruyipage-go/internal/support"
+import "github.com/pll177/ruyipage-go/internal/support"
 
 const (
 	// DefaultHost 是默认调试主机。

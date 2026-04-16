@@ -1,9 +1,9 @@
 package units
 
 import (
-	"ruyipage-go/internal/base"
-	"ruyipage-go/internal/bidi"
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/base"
+	"github.com/pll177/ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/support"
 	"time"
 )
 

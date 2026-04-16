@@ -1,6 +1,6 @@
 package ruyipage
 
-import "ruyipage-go/internal/support"
+import "github.com/pll177/ruyipage-go/internal/support"
 
 type (
 	// RuyiPageError 是全部公开错误的根错误类型。

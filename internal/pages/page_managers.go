@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"ruyipage-go/internal/bidi"
-	"ruyipage-go/internal/elements"
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/elements"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 const (

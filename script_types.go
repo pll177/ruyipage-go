@@ -1,6 +1,6 @@
 package ruyipage
 
-import "ruyipage-go/internal/units"
+import "github.com/pll177/ruyipage-go/internal/units"
 
 type (
 	// RealmInfo 表示单个 realm 信息。

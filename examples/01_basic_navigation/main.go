@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	ruyipage "ruyipage-go"
-	"ruyipage-go/examples/internal/exampleutil"
+	ruyipage "github.com/pll177/ruyipage-go"
+	"github.com/pll177/ruyipage-go/examples/internal/exampleutil"
 )
 
 const exampleName = "01_basic_navigation"

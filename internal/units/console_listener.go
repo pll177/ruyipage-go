@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/bidi"
 )
 
 // LogEntry 表示单条 console / javascript 日志。

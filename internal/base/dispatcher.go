@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 const defaultDispatchTimeout = time.Duration(support.DefaultBiDiTimeoutSeconds) * time.Second

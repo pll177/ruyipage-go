@@ -1,6 +1,6 @@
 package ruyipage
 
-import "ruyipage-go/internal/support"
+import "github.com/pll177/ruyipage-go/internal/support"
 
 type (
 	// ByValues 表示公开可复用的定位器类型常量集。

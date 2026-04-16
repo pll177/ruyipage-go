@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"ruyipage-go/internal/base"
-	"ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/base"
+	"github.com/pll177/ruyipage-go/internal/bidi"
 )
 
 // BidiEvent 表示单个 BiDi 事件的高层快照。

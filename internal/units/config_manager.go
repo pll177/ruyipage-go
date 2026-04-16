@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 
-	"ruyipage-go/internal/adapter"
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/adapter"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // ProfileResolver 按需解析当前 profile 路径。

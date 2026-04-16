@@ -1,6 +1,6 @@
 package ruyipage
 
-import internalelements "ruyipage-go/internal/elements"
+import internalelements "github.com/pll177/ruyipage-go/internal/elements"
 
 // StaticNode 表示静态 HTML 解析后的统一节点接口。
 type StaticNode interface {

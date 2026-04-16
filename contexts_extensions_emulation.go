@@ -1,6 +1,6 @@
 package ruyipage
 
-import internalunits "ruyipage-go/internal/units"
+import internalunits "github.com/pll177/ruyipage-go/internal/units"
 
 type (
 	// ContextInfo 表示单个 browsingContext 快照。

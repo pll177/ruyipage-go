@@ -1,4 +1,4 @@
-module ruyipage-go
+module github.com/pll177/ruyipage-go
 
 go 1.26
 

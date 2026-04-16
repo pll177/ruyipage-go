@@ -3,7 +3,7 @@ package ruyipage
 import (
 	"time"
 
-	internalunits "ruyipage-go/internal/units"
+	internalunits "github.com/pll177/ruyipage-go/internal/units"
 )
 
 // Actions 是页面级鼠标、键盘、滚轮动作链。

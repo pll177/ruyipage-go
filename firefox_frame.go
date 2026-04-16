@@ -1,6 +1,6 @@
 package ruyipage
 
-import internalpages "ruyipage-go/internal/pages"
+import internalpages "github.com/pll177/ruyipage-go/internal/pages"
 
 // FirefoxFrame 是 iframe/frame 的公开包装对象。
 type FirefoxFrame struct {

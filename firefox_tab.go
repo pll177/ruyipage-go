@@ -1,6 +1,6 @@
 package ruyipage
 
-import internalpages "ruyipage-go/internal/pages"
+import internalpages "github.com/pll177/ruyipage-go/internal/pages"
 
 // FirefoxTab 是页面返回的最小可用标签页对象。
 type FirefoxTab struct {

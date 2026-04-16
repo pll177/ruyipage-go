@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/bidi"
 )
 
 const (

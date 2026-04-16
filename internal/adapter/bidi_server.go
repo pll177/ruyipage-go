@@ -5,10 +5,10 @@ import (
 	"os/exec"
 	"time"
 
-	"ruyipage-go/internal/base"
-	"ruyipage-go/internal/bidi"
-	"ruyipage-go/internal/config"
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/base"
+	"github.com/pll177/ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/config"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 const (

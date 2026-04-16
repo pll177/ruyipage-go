@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"ruyipage-go/internal/adapter"
-	"ruyipage-go/internal/base"
-	"ruyipage-go/internal/bidi"
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/adapter"
+	"github.com/pll177/ruyipage-go/internal/base"
+	"github.com/pll177/ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // ProbeState 表示单个地址的探测结论。

@@ -1,6 +1,6 @@
 package ruyipage
 
-import internalunits "ruyipage-go/internal/units"
+import internalunits "github.com/pll177/ruyipage-go/internal/units"
 
 type (
 	// LogEntry 表示单条控制台 / javascript 日志。

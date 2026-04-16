@@ -4,7 +4,7 @@ import (
 	stderrors "errors"
 	"time"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // ClickerElement 表示 Clicker 依赖的最小元素能力。

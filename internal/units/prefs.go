@@ -4,7 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // PrefsManager 提供轻量的 user.js 偏好读写能力。

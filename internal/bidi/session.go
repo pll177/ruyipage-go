@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // SessionStatusResult 表示 session.status 的结果。

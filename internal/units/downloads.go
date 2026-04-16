@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/bidi"
 )
 
 // DownloadEvent 表示单条下载事件快照。

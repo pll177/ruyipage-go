@@ -1,6 +1,6 @@
 package units
 
-import "ruyipage-go/internal/bidi"
+import "github.com/pll177/ruyipage-go/internal/bidi"
 
 // RealmInfo 表示单个 realm 信息。
 type RealmInfo struct {

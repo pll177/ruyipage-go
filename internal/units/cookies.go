@@ -3,7 +3,7 @@ package units
 import (
 	"fmt"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // CookieInfo 表示单个 Cookie 的公开信息。

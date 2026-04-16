@@ -1,6 +1,6 @@
 package ruyipage
 
-import internalbrowser "ruyipage-go/internal/browser"
+import internalbrowser "github.com/pll177/ruyipage-go/internal/browser"
 
 // ProbeContextInfo 表示单个 live probe 上下文快照。
 type ProbeContextInfo struct {

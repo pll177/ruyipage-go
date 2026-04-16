@@ -3,7 +3,7 @@ package bidi
 import (
 	"time"
 
-	"ruyipage-go/internal/support"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 type browsingContextCommandDriver interface {
