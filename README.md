@@ -26,12 +26,14 @@
 
 ## 安装
 
-### 远程安装 / 拉取依赖
+### 新项目首次安装
 
-如果你要在其他 Go 项目里直接引用：
+如果你是第一次在一个新的 Go 项目里使用：
 
 ```bash
+go mod init your-project
 go get github.com/pll177/ruyipage-go@latest
+go mod tidy
 ```
 
 然后在代码里这样导入：
@@ -41,6 +43,33 @@ import ruyipage "github.com/pll177/ruyipage-go"
 ```
 
 > 注意：`go get` 使用的是 Go module 路径，正确写法是 `github.com/pll177/ruyipage-go`，不是带 `https://` 的 URL。
+
+### 老项目更新到最新版本
+
+如果你的项目已经引用过旧版本，直接在项目目录执行：
+
+```bash
+go get github.com/pll177/ruyipage-go@latest
+go mod tidy
+```
+
+### 老项目立即跟进 `main` 最新提交
+
+如果你刚看到仓库有新提交，想立刻拉到 `main` 当前最新代码，可用：
+
+```bash
+go get github.com/pll177/ruyipage-go@main
+go mod tidy
+```
+
+### 老项目固定到某一次提交
+
+如果你要锁定到指定提交版本，可用：
+
+```bash
+go get github.com/pll177/ruyipage-go@57c5f3a
+go mod tidy
+```
 
 ### 从源码使用
 
