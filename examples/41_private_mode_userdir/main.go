@@ -33,7 +33,7 @@ func exampleWithOptions(userDir string) error {
 
 	opts := exampleutil.FixedVisibleOptions().
 		WithUserDir(userDir).
-		EnablePrivateMode(true)
+		PrivateMode(true)
 
 	page, err := ruyipage.NewFirefoxPage(opts)
 	if err != nil {
@@ -81,8 +81,8 @@ func launchLike(userDir string, private bool) (*ruyipage.FirefoxPage, error) {
 	options := ruyipage.NewFirefoxOptions()
 	options.QuickStart(ruyipage.DefaultFirefoxQuickStartOptions())
 	options.WithBrowserPath(exampleutil.FixedFirefoxPath)
-	options.EnableHeadless(false)
+	options.Headless(false)
 	options.WithUserDir(userDir)
-	options.EnablePrivateMode(private)
+	options.PrivateMode(private)
 	return ruyipage.NewFirefoxPage(options)
 }

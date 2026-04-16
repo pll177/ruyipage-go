@@ -1258,7 +1258,7 @@ func (p *FirefoxBase) clearPromptTracking(driver *base.BrowserBiDiDriver, contex
 
 func (p *FirefoxBase) ensureXPathPickerPreload() error {
 	options := p.options()
-	if options == nil || !options.XPathPickerEnabled() {
+	if options == nil || !options.IsXPathPickerEnabled() {
 		return nil
 	}
 	key := p.xpathPickerKey()
@@ -1278,7 +1278,7 @@ func (p *FirefoxBase) ensureXPathPickerPreload() error {
 
 func (p *FirefoxBase) reinjectXPathPickerIfNeeded() error {
 	options := p.options()
-	if options == nil || !options.XPathPickerEnabled() {
+	if options == nil || !options.IsXPathPickerEnabled() {
 		return nil
 	}
 	if _, err := p.RunJSExpr("(" + xpathPickerScript + ")()"); err != nil {

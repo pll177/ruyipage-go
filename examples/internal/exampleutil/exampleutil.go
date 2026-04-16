@@ -38,7 +38,7 @@ func RepoRoot() (string, error) {
 
 // VisibleOptions 返回与 Python 示例对齐的可见浏览器配置。
 func VisibleOptions() *ruyipage.FirefoxOptions {
-	return ruyipage.NewFirefoxOptions().EnableHeadless(false)
+	return ruyipage.NewFirefoxOptions().Headless(false)
 }
 
 // TestPagePath 返回 examples 基础测试页的绝对路径。

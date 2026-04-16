@@ -28,12 +28,13 @@ var (
 type BiDiServer struct {
 	options *config.FirefoxOptions
 
-	driver       *base.BrowserBiDiDriver
-	process      *exec.Cmd
-	registry     *ContextRegistry
-	adapter      *ContextEventAdapter
-	sessionID    string
-	sessionOwned bool
+	driver             *base.BrowserBiDiDriver
+	process            *exec.Cmd
+	processExitBinding func() error
+	registry           *ContextRegistry
+	adapter            *ContextEventAdapter
+	sessionID          string
+	sessionOwned       bool
 }
 
 // NewBiDiServer 创建一个新的 BiDiServer 门面。
@@ -104,6 +105,14 @@ func (s *BiDiServer) Connect(launch bool) (*base.BrowserBiDiDriver, error) {
 			return nil, err
 		}
 		s.process = process
+		if process != nil && process.Process != nil && s.options.IsCloseBrowserOnExitEnabled() {
+			release, err := BindProcessKillOnParentExit(process)
+			if err != nil {
+				_ = process.Process.Kill()
+				return nil, support.NewBrowserLaunchError("绑定 Firefox 进程到 Go 进程退出联动失败", err)
+			}
+			s.processExitBinding = release
+		}
 	}
 
 	if !bidiServerWaitForFirefox(s.options.Host(), s.options.Port(), defaultBiDiServerReadyTimeout) {
@@ -203,8 +212,14 @@ func (s *BiDiServer) Disconnect() error {
 			firstErr = err
 		}
 	}
+	if s.processExitBinding != nil {
+		if err := s.processExitBinding(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
 
 	s.process = nil
+	s.processExitBinding = nil
 	s.registry = nil
 	s.sessionID = ""
 	s.sessionOwned = false
@@ -215,7 +230,7 @@ func (s *BiDiServer) prepareOptions() error {
 	if err := s.options.Validate(); err != nil {
 		return err
 	}
-	if !s.options.AutoPortEnabled() {
+	if !s.options.IsAutoPortEnabled() {
 		return nil
 	}
 

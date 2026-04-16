@@ -84,6 +84,7 @@ type FirefoxOptions struct {
 	privateMode        bool
 	userPromptHandler  map[string]string
 	xpathPickerEnabled bool
+	closeBrowserOnExit bool
 }
 
 // NewFirefoxOptions 返回带 Python 对齐默认值的配置对象。
@@ -212,8 +213,8 @@ func (o *FirefoxOptions) Proxy() string {
 	return o.proxy
 }
 
-// AutoPortEnabled 返回是否启用自动端口。
-func (o *FirefoxOptions) AutoPortEnabled() bool {
+// IsAutoPortEnabled 返回是否启用自动端口。
+func (o *FirefoxOptions) IsAutoPortEnabled() bool {
 	o.ensureDefaults()
 	return o.autoPortEnabled
 }
@@ -248,10 +249,16 @@ func (o *FirefoxOptions) UserPromptHandler() map[string]string {
 	return clonePromptHandler(o.userPromptHandler)
 }
 
-// XPathPickerEnabled 返回是否启用 XPath picker。
-func (o *FirefoxOptions) XPathPickerEnabled() bool {
+// IsXPathPickerEnabled 返回是否启用 XPath picker。
+func (o *FirefoxOptions) IsXPathPickerEnabled() bool {
 	o.ensureDefaults()
 	return o.xpathPickerEnabled
+}
+
+// IsCloseBrowserOnExitEnabled 返回是否在当前 Go 进程退出时自动关闭由本进程启动的浏览器。
+func (o *FirefoxOptions) IsCloseBrowserOnExitEnabled() bool {
+	o.ensureDefaults()
+	return o.closeBrowserOnExit
 }
 
 // WithBrowserPath 设置浏览器可执行文件路径。
@@ -352,8 +359,8 @@ func (o *FirefoxOptions) WithUserPromptHandler(handler map[string]string) *Firef
 	return o
 }
 
-// EnableHeadless 设置无头模式。
-func (o *FirefoxOptions) EnableHeadless(on bool) *FirefoxOptions {
+// Headless 设置无头模式。
+func (o *FirefoxOptions) Headless(on bool) *FirefoxOptions {
 	o.ensureDefaults()
 	o.headless = on
 	return o
@@ -418,15 +425,15 @@ func (o *FirefoxOptions) WithScriptTimeout(seconds float64) *FirefoxOptions {
 	return o
 }
 
-// EnableExistingOnly 设置是否只连接已有浏览器。
-func (o *FirefoxOptions) EnableExistingOnly(on bool) *FirefoxOptions {
+// ExistingOnly 设置是否只连接已有浏览器。
+func (o *FirefoxOptions) ExistingOnly(on bool) *FirefoxOptions {
 	o.ensureDefaults()
 	o.existingOnly = on
 	return o
 }
 
-// EnableAutoPort 设置是否启用自动端口；关闭时会清空起始端口。
-func (o *FirefoxOptions) EnableAutoPort(on bool) *FirefoxOptions {
+// AutoPortEnabled 设置是否启用自动端口；关闭时会清空起始端口。
+func (o *FirefoxOptions) AutoPortEnabled(on bool) *FirefoxOptions {
 	o.ensureDefaults()
 	o.autoPortEnabled = on
 	if !on {
@@ -479,17 +486,24 @@ func (o *FirefoxOptions) WithFPFile(path string) *FirefoxOptions {
 	return o
 }
 
-// EnablePrivateMode 设置 Firefox 私密模式。
-func (o *FirefoxOptions) EnablePrivateMode(on bool) *FirefoxOptions {
+// PrivateMode 设置 Firefox 私密模式。
+func (o *FirefoxOptions) PrivateMode(on bool) *FirefoxOptions {
 	o.ensureDefaults()
 	o.privateMode = on
 	return o
 }
 
-// EnableXPathPicker 设置是否启用 XPath picker。
-func (o *FirefoxOptions) EnableXPathPicker(on bool) *FirefoxOptions {
+// XPathPickerEnabled 设置是否启用 XPath picker。
+func (o *FirefoxOptions) XPathPickerEnabled(on bool) *FirefoxOptions {
 	o.ensureDefaults()
 	o.xpathPickerEnabled = on
+	return o
+}
+
+// CloseBrowserOnExitEnabled 设置是否在当前 Go 进程退出时自动关闭由本进程启动的浏览器。
+func (o *FirefoxOptions) CloseBrowserOnExitEnabled(on bool) *FirefoxOptions {
+	o.ensureDefaults()
+	o.closeBrowserOnExit = on
 	return o
 }
 
@@ -523,9 +537,9 @@ func (o *FirefoxOptions) QuickStart(options FirefoxQuickStartOptions) *FirefoxOp
 		o.WithUserDir(options.UserDir)
 	}
 
-	o.EnablePrivateMode(options.Private)
-	o.EnableHeadless(options.Headless)
-	o.EnableXPathPicker(options.XPathPicker)
+	o.PrivateMode(options.Private)
+	o.Headless(options.Headless)
+	o.XPathPickerEnabled(options.XPathPicker)
 
 	width := options.WindowWidth
 	height := options.WindowHeight
@@ -703,6 +717,7 @@ func (o *FirefoxOptions) ensureDefaults() {
 	}
 	o.retryTimes = defaultRetryTimes
 	o.retryInterval = defaultRetryIntervalSeconds
+	o.closeBrowserOnExit = true
 	o.initialized = true
 }
 

@@ -26,7 +26,7 @@ func run() error {
 	page, err := ruyipage.NewFirefoxPage(
 		exampleutil.FixedVisibleOptions().
 			WithUserDir(userDir).
-			EnableXPathPicker(true).
+			XPathPickerEnabled(true).
 			WithWindowSize(1600, 1100),
 	)
 	if err != nil {

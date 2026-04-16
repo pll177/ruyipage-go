@@ -52,7 +52,7 @@ func Attach(address ...string) (*FirefoxPage, error) {
 
 	opts := NewFirefoxOptions().
 		WithAddress(resolvedAddress).
-		EnableExistingOnly(true)
+		ExistingOnly(true)
 	return newFirefoxPageForEntry(opts)
 }
 

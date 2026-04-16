@@ -35,10 +35,10 @@ func run() error {
 	}()
 
 	options := exampleutil.FixedVisibleOptions().
-		EnableXPathPicker(true).
+		XPathPickerEnabled(true).
 		WithWindowSize(1600, 1100).
 		WithUserDir(userDir).
-		EnableAutoPort(true).
+		AutoPortEnabled(true).
 		WithAutoPortStart(xpathPickerAutoPortStart)
 
 	page, err := ruyipage.NewFirefoxPage(

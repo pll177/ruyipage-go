@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/gorilla/websocket"
 
@@ -23,7 +24,51 @@ const remoteAgentDefaultTimeout = 30 * time.Second
 var (
 	remoteAgentPollInterval = 500 * time.Millisecond
 	startFirefoxProcess     = defaultStartFirefoxProcess
+
+	kernel32DLL                  = syscall.NewLazyDLL("kernel32.dll")
+	procAssignProcessToJobObject = kernel32DLL.NewProc("AssignProcessToJobObject")
+	procCloseHandle              = kernel32DLL.NewProc("CloseHandle")
+	procCreateJobObjectW         = kernel32DLL.NewProc("CreateJobObjectW")
+	procOpenProcess              = kernel32DLL.NewProc("OpenProcess")
+	procSetInformationJobObject  = kernel32DLL.NewProc("SetInformationJobObject")
 )
+
+const (
+	processSetQuota                               = 0x0100
+	processTerminate                              = 0x0001
+	jobObjectExtendedLimitInformationClass        = 9
+	jobObjectLimitKillOnJobClose           uint32 = 0x00002000
+)
+
+type ioCounters struct {
+	ReadOperationCount  uint64
+	WriteOperationCount uint64
+	OtherOperationCount uint64
+	ReadTransferCount   uint64
+	WriteTransferCount  uint64
+	OtherTransferCount  uint64
+}
+
+type jobObjectBasicLimitInformation struct {
+	PerProcessUserTimeLimit int64
+	PerJobUserTimeLimit     int64
+	LimitFlags              uint32
+	MinimumWorkingSetSize   uintptr
+	MaximumWorkingSetSize   uintptr
+	ActiveProcessLimit      uint32
+	Affinity                uintptr
+	PriorityClass           uint32
+	SchedulingClass         uint32
+}
+
+type jobObjectExtendedLimitInformation struct {
+	BasicLimitInformation jobObjectBasicLimitInformation
+	IoInfo                ioCounters
+	ProcessMemoryLimit    uintptr
+	JobMemoryLimit        uintptr
+	PeakProcessMemoryUsed uintptr
+	PeakJobMemoryUsed     uintptr
+}
 
 // GetBiDiWSURL 从 Firefox Remote Agent 获取 BiDi WebSocket 地址。
 //
@@ -101,6 +146,36 @@ func LaunchFirefox(command []string, env map[string]string) (*exec.Cmd, error) {
 		return nil, support.NewBrowserLaunchError("启动 Firefox 失败", err)
 	}
 	return cmd, nil
+}
+
+// BindProcessKillOnParentExit 将进程绑定到当前 Go 进程的 Windows Job Object；
+// 当前 Go 进程退出时，系统会自动结束这个进程。
+func BindProcessKillOnParentExit(process *exec.Cmd) (func() error, error) {
+	if process == nil || process.Process == nil || process.Process.Pid <= 0 {
+		return func() error { return nil }, nil
+	}
+
+	processHandle, err := openProcessForJobAssignment(process.Process.Pid)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = closeWindowsHandle(processHandle)
+	}()
+
+	jobHandle, err := createKillOnCloseJobObject()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := assignProcessToJobObject(jobHandle, processHandle); err != nil {
+		_ = closeWindowsHandle(jobHandle)
+		return nil, err
+	}
+
+	return func() error {
+		return closeWindowsHandle(jobHandle)
+	}, nil
 }
 
 func fetchRemoteAgentJSON(url string, timeout time.Duration) ([]byte, error) {
@@ -202,6 +277,59 @@ func defaultStartFirefoxProcess(command []string, env map[string]string) (*exec.
 		return nil, err
 	}
 	return cmd, nil
+}
+
+func createKillOnCloseJobObject() (uintptr, error) {
+	handle, _, callErr := procCreateJobObjectW.Call(0, 0)
+	if handle == 0 {
+		return 0, os.NewSyscallError("CreateJobObjectW", callErr)
+	}
+
+	info := jobObjectExtendedLimitInformation{}
+	info.BasicLimitInformation.LimitFlags = jobObjectLimitKillOnJobClose
+	size := uint32(unsafe.Sizeof(info))
+	ok, _, callErr := procSetInformationJobObject.Call(
+		handle,
+		uintptr(jobObjectExtendedLimitInformationClass),
+		uintptr(unsafe.Pointer(&info)),
+		uintptr(size),
+	)
+	if ok == 0 {
+		_ = closeWindowsHandle(handle)
+		return 0, os.NewSyscallError("SetInformationJobObject", callErr)
+	}
+	return handle, nil
+}
+
+func openProcessForJobAssignment(pid int) (uintptr, error) {
+	handle, _, callErr := procOpenProcess.Call(
+		uintptr(processSetQuota|processTerminate),
+		0,
+		uintptr(uint32(pid)),
+	)
+	if handle == 0 {
+		return 0, os.NewSyscallError("OpenProcess", callErr)
+	}
+	return handle, nil
+}
+
+func assignProcessToJobObject(jobHandle uintptr, processHandle uintptr) error {
+	ok, _, callErr := procAssignProcessToJobObject.Call(jobHandle, processHandle)
+	if ok == 0 {
+		return os.NewSyscallError("AssignProcessToJobObject", callErr)
+	}
+	return nil
+}
+
+func closeWindowsHandle(handle uintptr) error {
+	if handle == 0 {
+		return nil
+	}
+	ok, _, callErr := procCloseHandle.Call(handle)
+	if ok == 0 {
+		return os.NewSyscallError("CloseHandle", callErr)
+	}
+	return nil
 }
 
 func buildRemoteAgentEnv(env map[string]string) []string {

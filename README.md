@@ -119,7 +119,7 @@ func main() {
 	opts := ruyipage.NewFirefoxOptions().
 		WithBrowserPath(`D:\Firefox\firefox.exe`).
 		WithUserDir(`D:\ruyipage_userdir`).
-		EnableHeadless(false)
+		Headless(false)
 
 	page, err := ruyipage.NewFirefoxPage(opts)
 	if err != nil {
@@ -173,8 +173,8 @@ func main() {
 ```go
 opts := ruyipage.NewFirefoxOptions().
 	WithBrowserPath(`D:\Firefox\firefox.exe`).
-	EnableHeadless(false).
-	EnableXPathPicker(true).
+	Headless(false).
+	XPathPickerEnabled(true).
 	WithWindowSize(1600, 1100)
 
 page, err := ruyipage.NewFirefoxPage(opts)

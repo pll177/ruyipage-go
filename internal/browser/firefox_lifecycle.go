@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	getFirefoxBiDiWSURL  = adapter.GetBiDiWSURL
-	waitForFirefoxReady  = adapter.WaitForFirefox
-	launchFirefoxProcess = adapter.LaunchFirefox
+	getFirefoxBiDiWSURL   = adapter.GetBiDiWSURL
+	waitForFirefoxReady   = adapter.WaitForFirefox
+	launchFirefoxProcess  = adapter.LaunchFirefox
+	bindProcessKillOnExit = adapter.BindProcessKillOnParentExit
 )
 
 var (
@@ -36,9 +37,10 @@ type Firefox struct {
 	options *config.FirefoxOptions
 	address string
 
-	driver      *base.BrowserBiDiDriver
-	process     *exec.Cmd
-	processDone chan error
+	driver             *base.BrowserBiDiDriver
+	process            *exec.Cmd
+	processDone        chan error
+	processExitBinding func() error
 
 	sessionID   string
 	ownsSession bool
@@ -84,7 +86,7 @@ func NewFirefox(options *config.FirefoxOptions) (*Firefox, error) {
 func ConnectFirefox(address string) (*Firefox, error) {
 	options := config.NewFirefoxOptions().
 		WithAddress(address).
-		EnableExistingOnly(true)
+		ExistingOnly(true)
 	return NewFirefox(options)
 }
 
@@ -106,7 +108,7 @@ func CreateFirefoxFromProbeInfo(info *ProbeInfo) (*Firefox, error) {
 
 	options := config.NewFirefoxOptions().
 		WithAddress(info.Address).
-		EnableExistingOnly(true)
+		ExistingOnly(true)
 	instance := newFirefoxInstance(options)
 	firefoxRegistry[info.Address] = instance
 	firefoxRegistryMu.Unlock()
@@ -428,11 +430,13 @@ func (f *Firefox) Quit(timeout time.Duration, force bool) error {
 	driver := f.driver
 	process := f.process
 	processDone := f.processDone
+	processExitBinding := f.processExitBinding
 	ownsSession := f.ownsSession
 
 	f.driver = nil
 	f.process = nil
 	f.processDone = nil
+	f.processExitBinding = nil
 	f.ownsSession = false
 	f.sessionID = ""
 	f.contextIDs = []string{}
@@ -458,6 +462,11 @@ func (f *Firefox) Quit(timeout time.Duration, force bool) error {
 
 	if err := waitManagedProcessExit(process, processDone, timeout, force); err != nil && firstErr == nil {
 		firstErr = err
+	}
+	if processExitBinding != nil && managedProcessExited(process) {
+		if err := processExitBinding(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 
 	if autoProfile != "" {
@@ -504,7 +513,7 @@ func prepareFirefoxOptions(options *config.FirefoxOptions) (*config.FirefoxOptio
 		return nil, err
 	}
 
-	if prepared.AutoPortEnabled() {
+	if prepared.IsAutoPortEnabled() {
 		start := prepared.AutoPortStart()
 		if start <= 0 {
 			start = prepared.Port()
@@ -866,6 +875,9 @@ func (f *Firefox) launchBrowser() error {
 	if process != nil {
 		if process.Process != nil {
 			f.watchManagedProcess(process)
+			if err := f.bindManagedProcessExit(process); err != nil {
+				return support.NewBrowserLaunchError("绑定 Firefox 进程到 Go 进程退出联动失败", err)
+			}
 		} else {
 			f.mu.Lock()
 			f.process = process
@@ -891,6 +903,30 @@ func (f *Firefox) watchManagedProcess(process *exec.Cmd) {
 	}()
 }
 
+func (f *Firefox) bindManagedProcessExit(process *exec.Cmd) error {
+	if process == nil || process.Process == nil || !f.options.IsCloseBrowserOnExitEnabled() {
+		return nil
+	}
+
+	release, err := bindProcessKillOnExit(process)
+	if err != nil {
+		return err
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.process != process {
+		_ = release()
+		return nil
+	}
+	if previous := f.processExitBinding; previous != nil {
+		_ = previous()
+	}
+	f.processExitBinding = release
+	return nil
+}
+
 func (f *Firefox) handleManagedProcessExit(process *exec.Cmd) {
 	f.mu.Lock()
 	if f.process != process {
@@ -901,8 +937,10 @@ func (f *Firefox) handleManagedProcessExit(process *exec.Cmd) {
 	quitting := f.quitting
 	autoProfile := f.autoProfile
 	driver := f.driver
+	processExitBinding := f.processExitBinding
 	f.process = nil
 	f.processDone = nil
+	f.processExitBinding = nil
 	f.autoProfile = ""
 	f.driver = nil
 	f.sessionID = ""
@@ -919,6 +957,9 @@ func (f *Firefox) handleManagedProcessExit(process *exec.Cmd) {
 	if driver != nil {
 		_ = driver.Stop()
 	}
+	if processExitBinding != nil {
+		_ = processExitBinding()
+	}
 	if autoProfile != "" {
 		_ = os.RemoveAll(autoProfile)
 	}
@@ -926,7 +967,7 @@ func (f *Firefox) handleManagedProcessExit(process *exec.Cmd) {
 }
 
 func (f *Firefox) ensureLaunchPortAvailable() error {
-	if f.options.AutoPortEnabled() {
+	if f.options.IsAutoPortEnabled() {
 		return nil
 	}
 
@@ -1033,6 +1074,13 @@ func waitManagedProcessExit(process *exec.Cmd, done <-chan error, timeout time.D
 		}
 		return nil
 	}
+}
+
+func managedProcessExited(process *exec.Cmd) bool {
+	if process == nil || process.Process == nil {
+		return true
+	}
+	return process.ProcessState != nil && process.ProcessState.Exited()
 }
 
 func findFirefoxFreePort(start int) (int, error) {
