@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Native BiDi Drag Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f7f7fb;
+            color: #222;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        p {
+            margin: 0 0 20px;
+            color: #555;
+        }
+
+        #playground {
+            position: relative;
+            width: 760px;
+            height: 320px;
+            border: 1px solid #d7d7e0;
+            border-radius: 16px;
+            background: white;
+            overflow: hidden;
+        }
+
+        #drag-source {
+            position: absolute;
+            left: 56px;
+            top: 110px;
+            width: 110px;
+            height: 110px;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #2e8b57, #58c57a);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            cursor: grab;
+            box-shadow: 0 14px 36px rgba(46, 139, 87, 0.24);
+        }
+
+        #drop-target {
+            position: absolute;
+            right: 56px;
+            top: 70px;
+            width: 240px;
+            height: 180px;
+            border-radius: 24px;
+            border: 3px dashed #6c78ff;
+            background: #eef1ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: #4a54a2;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        #drop-target.active {
+            background: #dde4ff;
+            border-color: #3951ff;
+            color: #2333a1;
+        }
+
+        #drop-target.success {
+            background: #e5fff0;
+            border-color: #1f9d55;
+            color: #17653a;
+        }
+
+        #result {
+            margin-top: 18px;
+            min-height: 24px;
+            font-weight: 700;
+        }
+
+        #log {
+            margin-top: 16px;
+            padding: 14px;
+            border-radius: 12px;
+            background: #171a24;
+            color: #d7deff;
+            font: 13px/1.5 Consolas, monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>原生 BiDi 拖拽测试页</h1>
+    <p>页面只监听真实鼠标事件，不使用 DragEvent/DataTransfer 或脚本合成事件。</p>
+
+    <div id="playground">
+        <div id="drag-source">拖我</div>
+        <div id="drop-target">将鼠标拖到这里后释放</div>
+    </div>
+
+    <div id="result">等待拖拽</div>
+    <div id="log"></div>
+
+    <script>
+        const source = document.getElementById('drag-source');
+        const target = document.getElementById('drop-target');
+        const result = document.getElementById('result');
+        const log = document.getElementById('log');
+
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        window.nativeBidiDragState = {
+            dragging: false,
+            enteredTarget: false,
+            dropped: false,
+            trustedMouseDown: null,
+            trustedMouseUp: null,
+            trustedMoveCount: 0,
+            lastClientX: null,
+            lastClientY: null,
+            events: []
+        };
+
+        function writeLog() {
+            log.textContent = window.nativeBidiDragState.events.join('\n');
+        }
+
+        function record(type, event) {
+            const line = `${type} trusted=${event.isTrusted} x=${event.clientX} y=${event.clientY}`;
+            window.nativeBidiDragState.events.push(line);
+            writeLog();
+        }
+
+        function pointInTarget(x, y) {
+            const rect = target.getBoundingClientRect();
+            return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+        }
+
+        source.addEventListener('mousedown', (event) => {
+            dragging = true;
+            window.nativeBidiDragState.dragging = true;
+            window.nativeBidiDragState.trustedMouseDown = event.isTrusted;
+            offsetX = event.clientX - source.offsetLeft;
+            offsetY = event.clientY - source.offsetTop;
+            source.style.cursor = 'grabbing';
+            result.textContent = '已按下，开始拖拽';
+            record('mousedown', event);
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            if (!dragging) {
+                return;
+            }
+
+            window.nativeBidiDragState.trustedMoveCount += event.isTrusted ? 1 : 0;
+            window.nativeBidiDragState.lastClientX = event.clientX;
+            window.nativeBidiDragState.lastClientY = event.clientY;
+
+            source.style.left = `${event.clientX - offsetX}px`;
+            source.style.top = `${event.clientY - offsetY}px`;
+
+            if (pointInTarget(event.clientX, event.clientY)) {
+                target.classList.add('active');
+                window.nativeBidiDragState.enteredTarget = true;
+                result.textContent = '鼠标已进入目标区域';
+            } else {
+                target.classList.remove('active');
+            }
+
+            record('mousemove', event);
+        });
+
+        document.addEventListener('mouseup', (event) => {
+            if (!dragging) {
+                return;
+            }
+
+            dragging = false;
+            window.nativeBidiDragState.dragging = false;
+            window.nativeBidiDragState.trustedMouseUp = event.isTrusted;
+            source.style.cursor = 'grab';
+
+            if (pointInTarget(event.clientX, event.clientY)) {
+                window.nativeBidiDragState.dropped = true;
+                target.classList.remove('active');
+                target.classList.add('success');
+                target.textContent = '已成功接收拖拽';
+                result.textContent = '拖拽成功';
+            } else {
+                target.classList.remove('active');
+                target.classList.remove('success');
+                target.textContent = '将鼠标拖到这里后释放';
+                result.textContent = '拖拽未命中目标区域';
+            }
+
+            record('mouseup', event);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XPath Picker Outer Iframe</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: linear-gradient(135deg, #ecfeff, #dbeafe);
+            color: #0f172a;
+        }
+        .card {
+            padding: 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(14, 165, 233, 0.18);
+            margin-bottom: 16px;
+        }
+        .row {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 14px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th,
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+            text-align: left;
+        }
+        iframe {
+            width: 100%;
+            min-height: 420px;
+            border: 1px solid rgba(59, 130, 246, 0.25);
+            border-radius: 16px;
+            background: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <strong id="outer-title">第一层 iframe 场景区</strong>
+    </div>
+
+    <div class="row">
+        <section class="card" id="outer-table-card">
+            <table id="outer-table">
+                <thead>
+                    <tr>
+                        <th>渠道</th>
+                        <th>CTR</th>
+                        <th>CVR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Search</td>
+                        <td data-ctr="6.8">6.8%</td>
+                        <td data-cvr="2.4">2.4%</td>
+                    </tr>
+                    <tr>
+                        <td>Feed</td>
+                        <td data-ctr="4.2">4.2%</td>
+                        <td data-cvr="1.7">1.7%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card" id="outer-toolbar">
+            <button id="outer-btn" type="button">保存第一层 iframe</button>
+            <p>这里有 <strong>复杂文本</strong>、<em>inline emphasis</em>、<code>token</code>。</p>
+        </section>
+    </div>
+
+    <section class="card" id="outer-rich-card">
+        <p>
+            outer iframe 中的 <span data-role="value-highlight">深层文本节点</span> 与复杂结构。
+        </p>
+        <div id="outer-open-host"></div>
+        <div id="outer-closed-host"></div>
+    </section>
+
+    <section class="card" id="inner-frame-card">
+        <h3>第二层 iframe</h3>
+        <iframe id="inner-demo-frame" title="inner-demo-frame" src="./xpath_picker_inner_iframe.html"></iframe>
+    </section>
+
+    <script>
+        const openHost = document.getElementById("outer-open-host");
+        const openRoot = openHost.attachShadow({ mode: "open" });
+        openRoot.innerHTML = [
+            '<style>',
+            '.box { margin-top: 14px; padding: 14px; border-radius: 14px; background: linear-gradient(135deg, #0284c7, #38bdf8); color: #fff; }',
+            '</style>',
+            '<div class="box">',
+            '<div id="outer-open-shadow-text">outer iframe open shadow</div>',
+            '<button id="outer-open-shadow-btn">open shadow button</button>',
+            '</div>'
+        ].join("");
+
+        const closedHost = document.getElementById("outer-closed-host");
+        const closedRoot = closedHost.attachShadow({ mode: "closed" });
+        closedRoot.innerHTML = [
+            '<style>',
+            '.box { margin-top: 14px; padding: 14px; border-radius: 14px; background: #0f172a; color: #dbeafe; }',
+            '</style>',
+            '<div class="box">',
+            '<div id="outer-closed-shadow-text">outer iframe closed shadow</div>',
+            '</div>'
+        ].join("");
+    </script>
+</body>
+</html>

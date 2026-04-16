@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Native BiDi Select Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f6f8fc;
+            color: #1f2430;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 28px;
+        }
+
+        p {
+            margin: 0 0 18px;
+            color: #5a6478;
+        }
+
+        .panel {
+            max-width: 760px;
+            padding: 20px;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 10px 30px rgba(27, 39, 94, 0.08);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        select {
+            width: 280px;
+            height: 42px;
+            padding: 0 10px;
+            font-size: 16px;
+        }
+
+        #result {
+            margin-top: 16px;
+            min-height: 22px;
+            font-weight: 700;
+        }
+
+        #log {
+            margin-top: 16px;
+            padding: 14px;
+            border-radius: 12px;
+            background: #171a24;
+            color: #d7deff;
+            font: 13px/1.5 Consolas, monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>原生 BiDi Select 检测页</h1>
+    <p>用于隔离验证 Firefox 中单选下拉框在原生 BiDi 输入下的行为。</p>
+
+    <div class="panel">
+        <label for="single-select">选择一个选项</label>
+        <select id="single-select">
+            <option value="">请选择</option>
+            <option value="opt1">选项1</option>
+            <option value="opt2">选项2</option>
+            <option value="opt3">选项3</option>
+        </select>
+
+        <div id="result">等待选择</div>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const select = document.getElementById('single-select');
+        const result = document.getElementById('result');
+        const log = document.getElementById('log');
+
+        window.nativeBidiSelectState = {
+            value: select.value,
+            selectedIndex: select.selectedIndex,
+            trustedChange: null,
+            trustedInput: null,
+            changeCount: 0,
+            inputCount: 0,
+            focused: false,
+            events: []
+        };
+
+        function writeLog() {
+            log.textContent = window.nativeBidiSelectState.events.join('\n');
+        }
+
+        function record(type, event) {
+            const line = `${type} trusted=${event.isTrusted} value=${select.value} index=${select.selectedIndex}`;
+            window.nativeBidiSelectState.events.push(line);
+            writeLog();
+        }
+
+        function updateResult(prefix) {
+            window.nativeBidiSelectState.value = select.value;
+            window.nativeBidiSelectState.selectedIndex = select.selectedIndex;
+            result.textContent = `${prefix}: value=${select.value || '<empty>'}, index=${select.selectedIndex}`;
+        }
+
+        select.addEventListener('focus', () => {
+            window.nativeBidiSelectState.focused = true;
+            window.nativeBidiSelectState.events.push('focus');
+            writeLog();
+        });
+
+        select.addEventListener('blur', () => {
+            window.nativeBidiSelectState.focused = false;
+            window.nativeBidiSelectState.events.push('blur');
+            writeLog();
+        });
+
+        select.addEventListener('input', (event) => {
+            window.nativeBidiSelectState.inputCount += 1;
+            window.nativeBidiSelectState.trustedInput = event.isTrusted;
+            updateResult('input');
+            record('input', event);
+        });
+
+        select.addEventListener('change', (event) => {
+            window.nativeBidiSelectState.changeCount += 1;
+            window.nativeBidiSelectState.trustedChange = event.isTrusted;
+            updateResult('change');
+            record('change', event);
+        });
+
+        updateResult('initial');
+    </script>
+</body>
+</html>

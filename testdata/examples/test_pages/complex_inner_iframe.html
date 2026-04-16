@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inner Iframe</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 12px; }
+        .box { padding: 10px; border: 1px solid #ddd; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h3 id="inner-title">Inner Iframe</h3>
+    <div id="inner-open-host" class="box"></div>
+    <div id="inner-closed-host" class="box"></div>
+
+    <script>
+        (function () {
+            const wm = new WeakMap();
+            const orig = Element.prototype.attachShadow;
+            Element.prototype.attachShadow = function (init) {
+                const root = orig.call(this, init);
+                if (init && init.mode === "closed") wm.set(this, root);
+                return root;
+            };
+            window.__ruyiGetClosedShadowRoot = function (el) {
+                return wm.get(el) || null;
+            };
+        })();
+
+        const openHost = document.getElementById("inner-open-host");
+        const openRoot = openHost.attachShadow({ mode: "open" });
+        openRoot.innerHTML = '<p id="inner-open-text">inner-open-text</p><button id="inner-open-btn">inner-open-btn</button>';
+
+        const closedHost = document.getElementById("inner-closed-host");
+        const closedRoot = closedHost.attachShadow({ mode: "closed" });
+        const p = document.createElement("p");
+        p.id = "inner-closed-text";
+        p.textContent = "inner-closed-text";
+        const btn = document.createElement("button");
+        btn.id = "inner-closed-btn";
+        btn.textContent = "inner-closed-btn";
+        closedRoot.appendChild(p);
+        closedRoot.appendChild(btn);
+    </script>
+</body>
+</html>

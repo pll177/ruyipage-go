@@ -1,0 +1,26 @@
+# Go 构建产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+*.prof
+coverage.out
+cover.out
+
+# 构建目录
+bin/
+dist/
+build/
+examples/*/output/
+
+# IDE 与临时文件
+.idea/
+.vscode/
+*.log
+*.tmp
+*.temp
+Thumbs.db
+.DS_Store

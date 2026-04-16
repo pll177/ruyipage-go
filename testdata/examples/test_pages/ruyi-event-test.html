@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>ruyi isTrusted 可视化测试</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f6fb;
+      color: #1f2937;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 20px 48px;
+    }
+
+    .panel {
+      background: #fff;
+      border: 1px solid #dbe3f0;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+    }
+
+    p {
+      margin: 6px 0;
+    }
+
+    .summary {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .card {
+      min-width: 150px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: #eef4ff;
+      border: 1px solid #cfe0ff;
+    }
+
+    .card strong {
+      display: block;
+      font-size: 24px;
+      margin-top: 6px;
+    }
+
+    .ok {
+      color: #166534;
+      background: #ecfdf3;
+      border-color: #b7ebc6;
+    }
+
+    .bad {
+      color: #991b1b;
+      background: #fff1f2;
+      border-color: #ffc8cf;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid #e5e7eb;
+      padding: 12px 10px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: #f8fafc;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .pill.ok {
+      background: #dcfce7;
+      color: #166534;
+      border: 1px solid #86efac;
+    }
+
+    .pill.bad {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #fca5a5;
+    }
+
+    .code {
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      background: #f3f4f6;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    .log {
+      background: #0f172a;
+      color: #dbeafe;
+      padding: 14px;
+      border-radius: 12px;
+      white-space: pre-wrap;
+      font-family: Consolas, monospace;
+      font-size: 13px;
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    input {
+      width: 100%;
+      max-width: 420px;
+      padding: 10px 12px;
+      font-size: 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <h1>ruyi / isTrusted 自动测试</h1>
+      <p>这个页面加载后会自动创建并派发事件，直接显示结果。</p>
+      <p>预期规则：</p>
+      <p><span class="code">ruyi: false</span> 或不传时，<span class="code">isTrusted</span> 应为 <span class="code">false</span></p>
+      <p><span class="code">ruyi: true</span> 时，<span class="code">isTrusted</span> 应为 <span class="code">true</span></p>
+
+      <div class="summary">
+        <div class="card" id="totalCard">
+          总测试数
+          <strong id="totalCount">0</strong>
+        </div>
+        <div class="card ok" id="passCard">
+          通过
+          <strong id="passCount">0</strong>
+        </div>
+        <div class="card bad" id="failCard">
+          失败
+          <strong id="failCount">0</strong>
+        </div>
+        <div class="card" id="finalCard">
+          最终结果
+          <strong id="finalText">运行中</strong>
+        </div>
+      </div>
+
+      <input id="target" value="initial" />
+    </div>
+
+    <div class="panel">
+      <table>
+        <thead>
+          <tr>
+            <th>测试项</th>
+            <th>事件构造</th>
+            <th>ruyi</th>
+            <th>预期 isTrusted</th>
+            <th>实际 isTrusted</th>
+            <th>结果</th>
+          </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <script>
+    const target = document.getElementById('target');
+    const body = document.getElementById('resultBody');
+    const logEl = document.getElementById('log');
+    const totalCount = document.getElementById('totalCount');
+    const passCount = document.getElementById('passCount');
+    const failCount = document.getElementById('failCount');
+    const finalText = document.getElementById('finalText');
+    const finalCard = document.getElementById('finalCard');
+
+    const results = [];
+
+    function log(message) {
+      logEl.textContent += message + '\n';
+      console.log(message);
+    }
+
+    function setValue(value) {
+      const setter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value'
+      ).set;
+      setter.call(target, value);
+    }
+
+    function makeRow(item) {
+      const tr = document.createElement('tr');
+      const ok = item.expected === item.actual;
+      tr.innerHTML =
+        '<td>' + item.name + '</td>' +
+        '<td><span class="code">' + item.ctor + '</span></td>' +
+        '<td>' + item.ruyi + '</td>' +
+        '<td>' + item.expected + '</td>' +
+        '<td>' + item.actual + '</td>' +
+        '<td><span class="pill ' + (ok ? 'ok' : 'bad') + '">' +
+        (ok ? 'PASS' : 'FAIL') +
+        '</span></td>';
+      body.appendChild(tr);
+    }
+
+    function refreshSummary() {
+      const pass = results.filter(item => item.expected === item.actual).length;
+      const fail = results.length - pass;
+
+      totalCount.textContent = String(results.length);
+      passCount.textContent = String(pass);
+      failCount.textContent = String(fail);
+
+      if (fail === 0) {
+        finalText.textContent = '全部通过';
+        finalCard.className = 'card ok';
+      } else {
+        finalText.textContent = '存在失败';
+        finalCard.className = 'card bad';
+      }
+    }
+
+    function getEventType(ctor) {
+      if (ctor === 'InputEvent') {
+        return 'input';
+      }
+      if (ctor === 'FocusEvent') {
+        return 'focus';
+      }
+      if (ctor === 'MouseEvent') {
+        return 'click';
+      }
+      if (ctor === 'KeyboardEvent') {
+        return 'keydown';
+      }
+      if (ctor === 'CustomEvent') {
+        return 'ruyi-custom';
+      }
+      if (ctor === 'PointerEvent') {
+        return 'pointerdown';
+      }
+      if (ctor === 'WheelEvent') {
+        return 'wheel';
+      }
+      return 'change';
+    }
+
+    function runCase(name, ctor, expected, createEvent, beforeDispatch) {
+      if (beforeDispatch) {
+        beforeDispatch();
+      }
+
+      let captured = null;
+      const type = getEventType(ctor);
+
+      function handler(event) {
+        captured = event.isTrusted;
+      }
+
+      target.addEventListener(type, handler, { once: true });
+
+      const event = createEvent();
+      const ruyi = String(!!event.ruyi);
+      target.dispatchEvent(event);
+
+      const item = {
+        name: name,
+        ctor: ctor,
+        ruyi: ruyi,
+        expected: expected,
+        actual: String(captured)
+      };
+
+      results.push(item);
+      makeRow(item);
+      refreshSummary();
+
+      log(
+        '[' + name + '] ' +
+        'ctor=' + ctor + ', ' +
+        'ruyi=' + ruyi + ', ' +
+        'expected=' + expected + ', ' +
+        'actual=' + String(captured)
+      );
+    }
+
+    window.addEventListener('load', function() {
+      log('开始自动测试');
+
+      runCase(
+        'change normal',
+        'Event',
+        'false',
+        function() {
+          return new Event('change', { bubbles: true });
+        }
+      );
+
+      runCase(
+        'change ruyi',
+        'Event',
+        'true',
+        function() {
+          return new Event('change', { bubbles: true, ruyi: true });
+        }
+      );
+
+      runCase(
+        'focus normal',
+        'FocusEvent',
+        'false',
+        function() {
+          return new FocusEvent('focus', { bubbles: false });
+        }
+      );
+
+      runCase(
+        'focus ruyi',
+        'FocusEvent',
+        'true',
+        function() {
+          return new FocusEvent('focus', { bubbles: false, ruyi: true });
+        }
+      );
+
+      runCase(
+        'input normal',
+        'InputEvent',
+        'false',
+        function() {
+          return new InputEvent('input', {
+            bubbles: true,
+            data: 'normal-value',
+            inputType: 'insertText'
+          });
+        },
+        function() {
+          setValue('normal-value');
+        }
+      );
+
+      runCase(
+        'input ruyi',
+        'InputEvent',
+        'true',
+        function() {
+          return new InputEvent('input', {
+            bubbles: true,
+            data: 'ruyi-value',
+            inputType: 'insertText',
+            ruyi: true
+          });
+        },
+        function() {
+          setValue('ruyi-value');
+        }
+      );
+
+      runCase(
+        'mouse normal',
+        'MouseEvent',
+        'false',
+        function() {
+          return new MouseEvent('click', {
+            bubbles: true,
+            clientX: 10,
+            clientY: 20
+          });
+        }
+      );
+
+      runCase(
+        'mouse ruyi',
+        'MouseEvent',
+        'true',
+        function() {
+          return new MouseEvent('click', {
+            bubbles: true,
+            clientX: 10,
+            clientY: 20,
+            ruyi: true
+          });
+        }
+      );
+
+      runCase(
+        'keyboard normal',
+        'KeyboardEvent',
+        'false',
+        function() {
+          return new KeyboardEvent('keydown', {
+            bubbles: true,
+            key: 'A',
+            code: 'KeyA'
+          });
+        }
+      );
+
+      runCase(
+        'keyboard ruyi',
+        'KeyboardEvent',
+        'true',
+        function() {
+          return new KeyboardEvent('keydown', {
+            bubbles: true,
+            key: 'A',
+            code: 'KeyA',
+            ruyi: true
+          });
+        }
+      );
+
+      runCase(
+        'custom normal',
+        'CustomEvent',
+        'false',
+        function() {
+          return new CustomEvent('ruyi-custom', {
+            bubbles: true,
+            detail: { value: 1 }
+          });
+        }
+      );
+
+      runCase(
+        'custom ruyi',
+        'CustomEvent',
+        'true',
+        function() {
+          return new CustomEvent('ruyi-custom', {
+            bubbles: true,
+            detail: { value: 2 },
+            ruyi: true
+          });
+        }
+      );
+
+      runCase(
+        'pointer normal',
+        'PointerEvent',
+        'false',
+        function() {
+          return new PointerEvent('pointerdown', {
+            bubbles: true,
+            clientX: 11,
+            clientY: 22,
+            pointerId: 1
+          });
+        }
+      );
+
+      runCase(
+        'pointer ruyi',
+        'PointerEvent',
+        'true',
+        function() {
+          return new PointerEvent('pointerdown', {
+            bubbles: true,
+            clientX: 11,
+            clientY: 22,
+            pointerId: 1,
+            ruyi: true
+          });
+        }
+      );
+
+      runCase(
+        'wheel normal',
+        'WheelEvent',
+        'false',
+        function() {
+          return new WheelEvent('wheel', {
+            bubbles: true,
+            deltaY: 120
+          });
+        }
+      );
+
+      runCase(
+        'wheel ruyi',
+        'WheelEvent',
+        'true',
+        function() {
+          return new WheelEvent('wheel', {
+            bubbles: true,
+            deltaY: 120,
+            ruyi: true
+          });
+        }
+      );
+
+      log('测试结束');
+    });
+  </script>
+</body>
+</html>

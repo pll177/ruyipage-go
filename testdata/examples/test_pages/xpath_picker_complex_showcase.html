@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XPath Picker Showcase</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            background: linear-gradient(180deg, #f8fafc, #eef2ff, #f8fafc);
+            color: #0f172a;
+        }
+        .page {
+            width: min(1320px, calc(100vw - 32px));
+            margin: 0 auto;
+            padding: 24px 0 80px;
+        }
+        .tip {
+            position: sticky;
+            top: 12px;
+            z-index: 10;
+            margin-bottom: 18px;
+            padding: 12px 14px;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, 0.82);
+            color: #e2e8f0;
+        }
+        .hero,
+        .grid {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .panel {
+            padding: 24px;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            box-shadow: 0 24px 60px rgba(15, 23, 42, 0.08);
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 18px;
+        }
+        .stat {
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.82);
+        }
+        .stat b {
+            display: block;
+            font-size: 28px;
+        }
+        .control-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #334155;
+        }
+        input,
+        select,
+        textarea {
+            width: 100%;
+            border: 1px solid rgba(148, 163, 184, 0.34);
+            border-radius: 14px;
+            padding: 12px 14px;
+            background: #fff;
+            font-size: 14px;
+        }
+        textarea {
+            min-height: 110px;
+            resize: vertical;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .buttons button,
+        .buttons a {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 12px;
+            padding: 10px 16px;
+            font-weight: 800;
+            text-decoration: none;
+        }
+        .primary { background: linear-gradient(135deg, #2563eb, #4f46e5); color: #fff; }
+        .secondary { background: rgba(37, 99, 235, 0.10); color: #1d4ed8; }
+        .ghost { background: rgba(148, 163, 184, 0.14); color: #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td {
+            padding: 12px 14px;
+            text-align: left;
+            border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+        }
+        .node {
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(226, 232, 240, 0.86);
+            margin-bottom: 12px;
+        }
+        .rich {
+            min-height: 120px;
+            padding: 16px;
+            border-radius: 18px;
+            border: 1px solid rgba(99, 102, 241, 0.18);
+            background: rgba(255, 255, 255, 0.82);
+            line-height: 1.8;
+        }
+        .svg-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(168, 85, 247, 0.08));
+            border: 1px solid rgba(125, 211, 252, 0.35);
+        }
+        iframe {
+            width: 100%;
+            min-height: 820px;
+            border: 1px solid rgba(148, 163, 184, 0.24);
+            border-radius: 22px;
+            background: #fff;
+        }
+        @media (max-width: 980px) {
+            .hero,
+            .grid,
+            .control-row,
+            .stats {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="tip" id="top-tip">XPath Picker 已开启。请测试普通节点、open shadow、closed shadow、iframe、嵌套 iframe。</div>
+
+        <section class="hero">
+            <div class="panel" id="hero-panel">
+                <div>Example 42</div>
+                <h1 id="main-title">XPath Picker 综合复杂 DOM 展示页</h1>
+                <p id="hero-copy">
+                    这个页面专门给 <strong>XPath picker</strong> 压测使用，包含主页面复杂节点、
+                    <span data-role="open-shadow-hint">open / closed shadow root</span>、
+                    <span data-role="iframe-hint">嵌套 iframe</span> 和深层文本结构。
+                </p>
+                <div class="stats">
+                    <div class="stat" data-metric-card="dom"><b>420+</b><span>可点击 DOM 节点</span></div>
+                    <div class="stat" data-metric-card="shadow"><b>4</b><span>shadow 场景</span></div>
+                    <div class="stat" data-metric-card="frame"><b>2</b><span>iframe 层级</span></div>
+                </div>
+            </div>
+
+            <aside class="panel" id="guide-panel">
+                <h2>建议点选顺序</h2>
+                <ol id="pick-order">
+                    <li>先点主页面表单、按钮、表格、SVG</li>
+                    <li>再点主页面 open shadow / closed shadow host</li>
+                    <li>然后点 outer iframe 及内部节点</li>
+                    <li>最后下钻到第二层 iframe</li>
+                </ol>
+                <p id="guide-note">右下角浮窗支持收起/展开，也支持暂停/恢复选择，但会始终固定在页面右下角。</p>
+            </aside>
+        </section>
+
+        <section class="grid">
+            <div class="panel" id="form-panel">
+                <h2>表单实验区</h2>
+                <div class="control-row">
+                    <div>
+                        <label for="campaign-name">Campaign Name</label>
+                        <input id="campaign-name" name="campaignName" value="XPath Picker Demo Campaign">
+                    </div>
+                    <div>
+                        <label for="audience-select">Audience</label>
+                        <select id="audience-select" name="audienceSegment">
+                            <option>Lookalike 1%</option>
+                            <option selected>Returning Visitors</option>
+                            <option>High Intent Leads</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label for="brief-textarea">Creative Brief</label>
+                    <textarea id="brief-textarea" name="creativeBrief">请把玻璃浮窗、复杂 iframe、shadow root 等场景都点一遍，再观察 XPath 输出。</textarea>
+                </div>
+                <div class="buttons">
+                    <button class="primary" id="save-btn" type="button">保存草稿</button>
+                    <button class="secondary" id="preview-btn" type="button">预览创意</button>
+                    <a class="ghost" id="jump-link" href="#table-panel">跳到报表</a>
+                </div>
+            </div>
+
+            <div class="panel" id="rich-panel">
+                <h2>富文本与复杂子节点</h2>
+                <div class="rich" id="contenteditable-block" contenteditable="true">
+                    这里是 <strong>contenteditable</strong> 区域，里面有 <span data-tag="kpi">彩色标签</span>、
+                    <a href="#node-list-panel">锚点链接</a>、<em>强调文本</em>、以及 <code>inline-code-token</code>。
+                    <div>下一行还有 <span class="deep-inline"><span>双层</span><span>嵌套</span><span>文本节点</span></span>。</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="panel" id="table-panel">
+                <h2>复杂表格</h2>
+                <table id="pricing-table">
+                    <thead>
+                        <tr>
+                            <th>Plan</th>
+                            <th>Traffic</th>
+                            <th>Retention</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr data-plan="starter"><td>Starter</td><td><span data-metric="traffic">12k</span> visits</td><td>18 days</td><td><span aria-label="healthy-status">Healthy</span></td></tr>
+                        <tr data-plan="growth"><td>Growth</td><td><span data-metric="traffic">88k</span> visits</td><td>43 days</td><td><span aria-label="warning-status">Needs tuning</span></td></tr>
+                        <tr data-plan="scale"><td>Scale</td><td><span data-metric="traffic">230k</span> visits</td><td>61 days</td><td><span aria-label="elite-status">Excellent</span></td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="panel" id="node-list-panel">
+                <h2>复杂列表项</h2>
+                <article class="node" data-card="a1">
+                    <div><strong>多层 article 节点</strong> / 内含 <span class="chip">chip</span> / <span class="chip">badge</span></div>
+                    <small>适合测试相对 XPath 是否优先使用 data 属性</small>
+                </article>
+                <article class="node" data-card="b2">
+                    <div>一段较长的说明文本，里面还套了 <span><strong>深层 strong</strong></span> 和 <span><em>emphasis</em></span></div>
+                    <small>文本内容较长，适合测试文本裁剪效果</small>
+                </article>
+                <article class="node" data-card="c3">
+                    <div id="special-line">特殊目标行 <span data-target="true">带 data-target</span> 与尾部文本节点</div>
+                    <small>用于检查元素名字和 XPath 相对路径生成</small>
+                </article>
+            </div>
+        </section>
+
+        <section class="grid">
+            <div class="panel" id="svg-panel">
+                <h2>SVG 与图形节点</h2>
+                <div class="svg-wrap">
+                    <svg id="analytics-svg" width="280" height="160" viewBox="0 0 280 160" role="img" aria-label="analytics trend chart">
+                        <defs>
+                            <linearGradient id="line-gradient" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#2563eb"></stop>
+                                <stop offset="100%" stop-color="#8b5cf6"></stop>
+                            </linearGradient>
+                        </defs>
+                        <rect x="8" y="8" width="264" height="144" rx="18" fill="rgba(255,255,255,0.65)"></rect>
+                        <path id="trend-line" d="M 24 110 C 56 80, 72 88, 98 62 S 158 34, 184 72 S 240 102, 256 46" fill="none" stroke="url(#line-gradient)" stroke-width="6" stroke-linecap="round"></path>
+                        <circle cx="98" cy="62" r="8" fill="#2563eb"></circle>
+                        <circle cx="184" cy="72" r="8" fill="#7c3aed"></circle>
+                        <text x="24" y="136" font-size="12" fill="#475569">SVG path / circle / text</text>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="panel" id="shadow-panel">
+                <h2>主页面 Shadow Root</h2>
+                <div id="main-open-shadow-host"></div>
+                <div id="main-closed-shadow-host"></div>
+            </div>
+        </section>
+
+        <section class="panel" id="frame-panel">
+            <h2>嵌套 iframe 展示区</h2>
+            <iframe id="outer-demo-frame" title="outer-demo-frame" src="./xpath_picker_outer_iframe.html"></iframe>
+        </section>
+    </div>
+
+    <script>
+        const openHost = document.getElementById("main-open-shadow-host");
+        const openRoot = openHost.attachShadow({ mode: "open" });
+        openRoot.innerHTML = [
+            '<style>',
+            '.box { padding: 18px; border-radius: 18px; background: linear-gradient(135deg, #111827, #334155); color: #e2e8f0; }',
+            '.sub { margin-top: 8px; opacity: 0.8; font-size: 12px; }',
+            'button { margin-top: 12px; border: 0; border-radius: 12px; padding: 10px 14px; background: #38bdf8; color: #082f49; font-weight: 800; }',
+            '</style>',
+            '<div class="box">',
+            '<div id="main-open-shadow-title">主页面 open shadow 区域</div>',
+            '<div class="sub">这里的内部节点可以直接作为 shadow 内部目标进行测试。</div>',
+            '<button id="main-open-shadow-btn">主页面 open shadow 按钮</button>',
+            '</div>'
+        ].join("");
+
+        const closedHost = document.getElementById("main-closed-shadow-host");
+        const closedRoot = closedHost.attachShadow({ mode: "closed" });
+        closedRoot.innerHTML = [
+            '<style>',
+            '.box { margin-top: 14px; padding: 18px; border-radius: 18px; background: linear-gradient(135deg, #7c3aed, #c084fc); color: #fff; }',
+            '</style>',
+            '<div class="box">',
+            '<div id="main-closed-shadow-title">主页面 closed shadow 区域</div>',
+            '<div>closed shadow 内部包含更深层复杂节点。</div>',
+            '</div>'
+        ].join("");
+    </script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XPath Picker Inner Iframe</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 18px;
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: linear-gradient(135deg, #fff7ed, #ffedd5);
+            color: #7c2d12;
+        }
+        .card {
+            padding: 14px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.78);
+            border: 1px solid rgba(251, 146, 60, 0.35);
+            margin-bottom: 14px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .note {
+            line-height: 1.8;
+        }
+        button {
+            border: 0;
+            border-radius: 10px;
+            padding: 9px 12px;
+            background: #ea580c;
+            color: #fff;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2 id="inner-title">第二层 iframe</h2>
+        <div class="grid">
+            <div>
+                <label for="inner-input">备注</label>
+                <input id="inner-input" name="innerNote" value="inner iframe value">
+            </div>
+            <div>
+                <button id="inner-btn" type="button">提交</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card note" id="inner-rich" contenteditable="true">
+        这里是 <strong>inner iframe</strong> 的富文本区域，包含
+        <span data-code="ALPHA">ALPHA</span> /
+        <span data-code="BETA">BETA</span> /
+        <em>深层文本</em>。
+    </div>
+
+    <ul class="card" id="inner-list">
+        <li data-item="1">第一项</li>
+        <li data-item="2">第二项</li>
+        <li data-item="3">第三项长文本用于 XPath 测试</li>
+    </ul>
+
+    <div id="inner-open-host"></div>
+    <div id="inner-closed-host"></div>
+
+    <script>
+        const openHost = document.getElementById("inner-open-host");
+        const openRoot = openHost.attachShadow({ mode: "open" });
+        openRoot.innerHTML = [
+            '<style>',
+            '.box { margin-top: 14px; padding: 14px; border-radius: 14px; background: linear-gradient(135deg, #f97316, #fb923c); color: #fff; }',
+            '</style>',
+            '<div class="box">',
+            '<div id="inner-open-shadow-text">inner iframe open shadow</div>',
+            '<button id="inner-open-shadow-btn">open shadow button</button>',
+            '</div>'
+        ].join("");
+
+        const closedHost = document.getElementById("inner-closed-host");
+        const closedRoot = closedHost.attachShadow({ mode: "closed" });
+        closedRoot.innerHTML = [
+            '<style>',
+            '.box { margin-top: 14px; padding: 14px; border-radius: 14px; background: #7c2d12; color: #ffedd5; }',
+            '</style>',
+            '<div class="box">',
+            '<div id="inner-closed-shadow-text">inner iframe closed shadow</div>',
+            '</div>'
+        ].join("");
+    </script>
+</body>
+</html>

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Prompt Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        .section { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        button { padding: 8px 14px; margin-right: 8px; margin-bottom: 8px; }
+        .result { background: #f5f5f5; padding: 10px; min-height: 24px; border-radius: 4px; }
+        pre { background: #111827; color: #dbeafe; padding: 12px; border-radius: 6px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>User Prompt 专用测试页</h1>
+
+    <div class="section">
+        <h2>alert</h2>
+        <button id="alert-btn">触发 alert</button>
+        <div id="alert-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>confirm</h2>
+        <button id="confirm-btn">触发 confirm</button>
+        <div id="confirm-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>prompt 登录流</h2>
+        <button id="login-prompt-btn">通过 prompt 登录</button>
+        <div id="prompt-result" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>事件状态</h2>
+        <pre id="state"></pre>
+    </div>
+
+    <script>
+        window.promptState = {
+            lastAction: null,
+            alertHandled: false,
+            confirmResult: null,
+            promptResult: null,
+            alertEntered: false,
+            confirmEntered: false,
+            promptEntered: false,
+            afterAlertReached: false,
+            afterConfirmReached: false,
+            afterPromptReached: false,
+            loginUser: null,
+            loginPass: null,
+            log: []
+        };
+
+        function syncState() {
+            document.getElementById('state').textContent = JSON.stringify(window.promptState, null, 2);
+        }
+
+        function record(msg) {
+            window.promptState.log.push(msg);
+            syncState();
+        }
+
+        document.getElementById('alert-btn').addEventListener('click', () => {
+            window.promptState.alertEntered = true;
+            record('before alert');
+            alert('这是一个 alert');
+            window.promptState.lastAction = 'alert';
+            window.promptState.alertHandled = true;
+            window.promptState.afterAlertReached = true;
+            document.getElementById('alert-result').textContent = 'alert 已处理';
+            record('after alert');
+        });
+
+        document.getElementById('confirm-btn').addEventListener('click', () => {
+            window.promptState.confirmEntered = true;
+            record('before confirm');
+            const result = confirm('确认继续吗？');
+            window.promptState.lastAction = 'confirm';
+            window.promptState.confirmResult = result;
+            window.promptState.afterConfirmReached = true;
+            document.getElementById('confirm-result').textContent = 'confirm: ' + result;
+            record('after confirm => ' + result);
+        });
+
+        document.getElementById('login-prompt-btn').addEventListener('click', () => {
+            window.promptState.promptEntered = true;
+            record('before login prompt:user');
+            const username = prompt('请输入用户名', 'guest');
+            if (username === null) {
+                window.promptState.lastAction = 'prompt';
+                window.promptState.promptResult = null;
+                window.promptState.afterPromptReached = true;
+                document.getElementById('prompt-result').textContent = 'login: cancelled@username';
+                record('login cancelled at username');
+                return;
+            }
+            window.promptState.loginUser = username;
+            record('before login prompt:password');
+            const password = prompt('请输入密码', '123456');
+            if (password === null) {
+                window.promptState.lastAction = 'prompt';
+                window.promptState.promptResult = null;
+                window.promptState.afterPromptReached = true;
+                document.getElementById('prompt-result').textContent = 'login: cancelled@password';
+                record('login cancelled at password');
+                return;
+            }
+            window.promptState.loginPass = password;
+            window.promptState.lastAction = 'prompt';
+            window.promptState.promptResult = username + '/' + password;
+            window.promptState.afterPromptReached = true;
+            document.getElementById('prompt-result').textContent = 'login: ' + username + '/' + password;
+            record('after login prompt => ' + username + '/' + password);
+        });
+
+        syncState();
+    </script>
+</body>
+</html>
