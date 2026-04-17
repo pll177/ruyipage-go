@@ -10,8 +10,12 @@ import (
 func main() {
 	opt := ruyipage.NewFirefoxOptions()
 	opt.Headless(false)
-
+	opt.WithBrowserPath("C:\\Program Files\\Mozilla Firefox\\firefox.exe")
+	opt.WithWindowSize(1280, 800)
 	opt.CloseBrowserOnExitEnabled(true)
+	if _, err := opt.WithAutoFPFile(); err != nil {
+		panic(err)
+	}
 	page, err := ruyipage.NewFirefoxPage(opt)
 	if err != nil {
 		panic(err)

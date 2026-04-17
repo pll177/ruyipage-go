@@ -88,6 +88,12 @@ type FirefoxOptions struct {
 	xpathPickerEnabled  bool
 	actionVisualEnabled bool
 	closeBrowserOnExit  bool
+	managedFPFile       string
+	managedFPFileAuto   bool
+	autoFPWindowWidth   int
+	autoFPWindowHeight  int
+	autoFPFrozen        bool
+	autoFPInvalidMethod string
 }
 
 // NewFirefoxOptions 返回带 Python 对齐默认值的配置对象。
@@ -274,6 +280,9 @@ func (o *FirefoxOptions) IsCloseBrowserOnExitEnabled() bool {
 // WithBrowserPath 设置浏览器可执行文件路径。
 func (o *FirefoxOptions) WithBrowserPath(path string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithBrowserPath") {
+		return o
+	}
 	o.browserPath = path
 	return o
 }
@@ -281,6 +290,9 @@ func (o *FirefoxOptions) WithBrowserPath(path string) *FirefoxOptions {
 // WithAddress 设置调试地址，支持 host:port 或仅 host。
 func (o *FirefoxOptions) WithAddress(address string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithAddress") {
+		return o
+	}
 
 	if idx := strings.LastIndex(address, ":"); idx >= 0 {
 		o.host = address[:idx]
@@ -300,25 +312,51 @@ func (o *FirefoxOptions) WithAddress(address string) *FirefoxOptions {
 // WithPort 设置调试端口。
 func (o *FirefoxOptions) WithPort(port int) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithPort") {
+		return o
+	}
 	o.port = port
 	return o
+}
+
+// SetResolvedPort 仅供内部启动流程写回最终端口，不受 WithAutoFPFile 冻结限制。
+func (o *FirefoxOptions) SetResolvedPort(port int) {
+	o.ensureDefaults()
+	o.port = port
 }
 
 // WithProfile 设置 Firefox profile 目录。
 func (o *FirefoxOptions) WithProfile(path string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithProfile") {
+		return o
+	}
 	o.profilePath = path
 	return o
 }
 
+// SetResolvedProfilePath 仅供内部启动流程写回临时 profile，不受 WithAutoFPFile 冻结限制。
+func (o *FirefoxOptions) SetResolvedProfilePath(path string) {
+	o.ensureDefaults()
+	o.profilePath = path
+}
+
 // WithUserDir 设置用户目录，是 WithProfile 的新手友好别名。
 func (o *FirefoxOptions) WithUserDir(path string) *FirefoxOptions {
-	return o.WithProfile(path)
+	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithUserDir") {
+		return o
+	}
+	o.profilePath = path
+	return o
 }
 
 // WithArgument 添加启动参数；传 value 时会拼成 arg=value。
 func (o *FirefoxOptions) WithArgument(arg string, value ...string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithArgument") {
+		return o
+	}
 
 	if len(value) > 0 {
 		o.arguments = append(o.arguments, fmt.Sprintf("%s=%s", arg, value[0]))
@@ -338,6 +376,9 @@ func (o *FirefoxOptions) WithArgument(arg string, value ...string) *FirefoxOptio
 // WithoutArgument 移除指定参数及其 arg=value 形式。
 func (o *FirefoxOptions) WithoutArgument(arg string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithoutArgument") {
+		return o
+	}
 
 	filtered := make([]string, 0, len(o.arguments))
 	for _, existing := range o.arguments {
@@ -353,6 +394,9 @@ func (o *FirefoxOptions) WithoutArgument(arg string) *FirefoxOptions {
 // WithPreference 设置 Firefox 首选项。
 func (o *FirefoxOptions) WithPreference(key string, value any) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithPreference") {
+		return o
+	}
 	o.preferences[key] = value
 	return o
 }
@@ -360,6 +404,9 @@ func (o *FirefoxOptions) WithPreference(key string, value any) *FirefoxOptions {
 // WithUserPromptHandler 设置 session 级默认提示框处理策略。
 func (o *FirefoxOptions) WithUserPromptHandler(handler map[string]string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithUserPromptHandler") {
+		return o
+	}
 	if len(handler) == 0 {
 		o.userPromptHandler = nil
 		return o
@@ -372,13 +419,19 @@ func (o *FirefoxOptions) WithUserPromptHandler(handler map[string]string) *Firef
 // Headless 设置无头模式。
 func (o *FirefoxOptions) Headless(on bool) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("Headless") {
+		return o
+	}
 	o.headless = on
 	return o
 }
 
-// WithProxy 设置代理地址。
+// WithProxy 设置代理地址；若已调用 WithAutoFPFile，启动前校验会报错。
 func (o *FirefoxOptions) WithProxy(proxy string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithProxy") {
+		return o
+	}
 	o.proxy = proxy
 	return o
 }
@@ -386,6 +439,9 @@ func (o *FirefoxOptions) WithProxy(proxy string) *FirefoxOptions {
 // WithDownloadPath 设置下载目录；与 Python 一致，显式设置时会转绝对路径。
 func (o *FirefoxOptions) WithDownloadPath(path string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithDownloadPath") {
+		return o
+	}
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		o.downloadPath = path
@@ -399,6 +455,9 @@ func (o *FirefoxOptions) WithDownloadPath(path string) *FirefoxOptions {
 // WithLoadMode 设置加载模式；最终合法性由 Validate 统一校验。
 func (o *FirefoxOptions) WithLoadMode(mode FirefoxLoadMode) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithLoadMode") {
+		return o
+	}
 	o.loadMode = mode
 	return o
 }
@@ -406,6 +465,9 @@ func (o *FirefoxOptions) WithLoadMode(mode FirefoxLoadMode) *FirefoxOptions {
 // WithTimeouts 一次性覆盖三类超时，单位为秒。
 func (o *FirefoxOptions) WithTimeouts(base, pageLoad, script float64) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithTimeouts") {
+		return o
+	}
 	o.timeouts = FirefoxTimeouts{
 		Base:     base,
 		PageLoad: pageLoad,
@@ -417,6 +479,9 @@ func (o *FirefoxOptions) WithTimeouts(base, pageLoad, script float64) *FirefoxOp
 // WithBaseTimeout 设置基础超时。
 func (o *FirefoxOptions) WithBaseTimeout(seconds float64) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithBaseTimeout") {
+		return o
+	}
 	o.timeouts.Base = seconds
 	return o
 }
@@ -424,6 +489,9 @@ func (o *FirefoxOptions) WithBaseTimeout(seconds float64) *FirefoxOptions {
 // WithPageLoadTimeout 设置页面加载超时。
 func (o *FirefoxOptions) WithPageLoadTimeout(seconds float64) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithPageLoadTimeout") {
+		return o
+	}
 	o.timeouts.PageLoad = seconds
 	return o
 }
@@ -431,6 +499,9 @@ func (o *FirefoxOptions) WithPageLoadTimeout(seconds float64) *FirefoxOptions {
 // WithScriptTimeout 设置脚本执行超时。
 func (o *FirefoxOptions) WithScriptTimeout(seconds float64) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithScriptTimeout") {
+		return o
+	}
 	o.timeouts.Script = seconds
 	return o
 }
@@ -438,6 +509,9 @@ func (o *FirefoxOptions) WithScriptTimeout(seconds float64) *FirefoxOptions {
 // ExistingOnly 设置是否只连接已有浏览器。
 func (o *FirefoxOptions) ExistingOnly(on bool) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("ExistingOnly") {
+		return o
+	}
 	o.existingOnly = on
 	return o
 }
@@ -445,6 +519,9 @@ func (o *FirefoxOptions) ExistingOnly(on bool) *FirefoxOptions {
 // AutoPortEnabled 设置是否启用自动端口；关闭时会清空起始端口。
 func (o *FirefoxOptions) AutoPortEnabled(on bool) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("AutoPortEnabled") {
+		return o
+	}
 	o.autoPortEnabled = on
 	if !on {
 		o.autoPortStart = 0
@@ -455,6 +532,9 @@ func (o *FirefoxOptions) AutoPortEnabled(on bool) *FirefoxOptions {
 // WithAutoPortStart 设置自动端口搜索起始值，同时启用自动端口。
 func (o *FirefoxOptions) WithAutoPortStart(start int) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithAutoPortStart") {
+		return o
+	}
 	o.autoPortEnabled = true
 	o.autoPortStart = start
 	return o
@@ -463,6 +543,9 @@ func (o *FirefoxOptions) WithAutoPortStart(start int) *FirefoxOptions {
 // WithRetry 一次性覆盖重试次数与间隔。
 func (o *FirefoxOptions) WithRetry(times int, interval float64) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithRetry") {
+		return o
+	}
 	o.retryTimes = times
 	o.retryInterval = interval
 	return o
@@ -471,6 +554,9 @@ func (o *FirefoxOptions) WithRetry(times int, interval float64) *FirefoxOptions 
 // WithRetryTimes 设置重试次数。
 func (o *FirefoxOptions) WithRetryTimes(times int) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithRetryTimes") {
+		return o
+	}
 	o.retryTimes = times
 	return o
 }
@@ -478,6 +564,9 @@ func (o *FirefoxOptions) WithRetryTimes(times int) *FirefoxOptions {
 // WithRetryInterval 设置重试间隔。
 func (o *FirefoxOptions) WithRetryInterval(interval float64) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithRetryInterval") {
+		return o
+	}
 	o.retryInterval = interval
 	return o
 }
@@ -485,6 +574,9 @@ func (o *FirefoxOptions) WithRetryInterval(interval float64) *FirefoxOptions {
 // WithUserContext 设置默认 user context。
 func (o *FirefoxOptions) WithUserContext(userContext string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithUserContext") {
+		return o
+	}
 	o.userContext = userContext
 	return o
 }
@@ -492,13 +584,31 @@ func (o *FirefoxOptions) WithUserContext(userContext string) *FirefoxOptions {
 // WithFPFile 设置指纹配置文件路径。
 func (o *FirefoxOptions) WithFPFile(path string) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithFPFile") {
+		return o
+	}
+	if o.managedFPFileAuto && o.managedFPFile != "" {
+		if !sameCleanPath(o.managedFPFile, path) {
+			_ = os.Remove(o.managedFPFile)
+		}
+		o.managedFPFile = ""
+		o.managedFPFileAuto = false
+	}
 	o.fpfile = path
 	return o
+}
+
+// WithAutoFPFile 自动生成临时 fpfile，并读取当前已设置配置后冻结后续修改。
+func (o *FirefoxOptions) WithAutoFPFile() (*FirefoxOptions, error) {
+	return o.withAutoFPFile()
 }
 
 // PrivateMode 设置 Firefox 私密模式。
 func (o *FirefoxOptions) PrivateMode(on bool) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("PrivateMode") {
+		return o
+	}
 	o.privateMode = on
 	return o
 }
@@ -506,6 +616,9 @@ func (o *FirefoxOptions) PrivateMode(on bool) *FirefoxOptions {
 // XPathPickerEnabled 设置是否启用 XPath picker。
 func (o *FirefoxOptions) XPathPickerEnabled(on bool) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("XPathPickerEnabled") {
+		return o
+	}
 	o.xpathPickerEnabled = on
 	return o
 }
@@ -513,6 +626,9 @@ func (o *FirefoxOptions) XPathPickerEnabled(on bool) *FirefoxOptions {
 // ActionVisualEnabled 设置是否启用鼠标行为可视化调试模式。
 func (o *FirefoxOptions) ActionVisualEnabled(on bool) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("ActionVisualEnabled") {
+		return o
+	}
 	o.actionVisualEnabled = on
 	return o
 }
@@ -520,6 +636,9 @@ func (o *FirefoxOptions) ActionVisualEnabled(on bool) *FirefoxOptions {
 // CloseBrowserOnExitEnabled 设置是否在当前 Go 进程退出时自动关闭由本进程启动的浏览器。
 func (o *FirefoxOptions) CloseBrowserOnExitEnabled(on bool) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("CloseBrowserOnExitEnabled") {
+		return o
+	}
 	o.closeBrowserOnExit = on
 	return o
 }
@@ -527,25 +646,48 @@ func (o *FirefoxOptions) CloseBrowserOnExitEnabled(on bool) *FirefoxOptions {
 // WithWindowSize 通过启动参数设置窗口大小，并覆盖已有 width/height 参数。
 func (o *FirefoxOptions) WithWindowSize(width, height int) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("WithWindowSize") {
+		return o
+	}
+	o.arguments = replaceWindowSizeArguments(o.arguments, width, height)
+	return o
+}
 
-	filtered := make([]string, 0, len(o.arguments))
-	for _, existing := range o.arguments {
-		if strings.HasPrefix(existing, "--width=") || strings.HasPrefix(existing, "--height=") {
-			continue
-		}
-		filtered = append(filtered, existing)
+// ManagedFPFile 返回当前受托管自动 fpfile 路径；非自动生成时返回空串。
+func (o *FirefoxOptions) ManagedFPFile() string {
+	o.ensureDefaults()
+	if !o.managedFPFileAuto {
+		return ""
+	}
+	return o.managedFPFile
+}
+
+// CleanupManagedFPFile 删除当前受托管自动 fpfile，并清空内部标记。
+func (o *FirefoxOptions) CleanupManagedFPFile() error {
+	o.ensureDefaults()
+	if !o.managedFPFileAuto || o.managedFPFile == "" {
+		return nil
 	}
 
-	o.arguments = append(filtered,
-		fmt.Sprintf("--width=%d", width),
-		fmt.Sprintf("--height=%d", height),
-	)
-	return o
+	path := o.managedFPFile
+	o.managedFPFile = ""
+	o.managedFPFileAuto = false
+	if o.fpfile == path {
+		o.fpfile = ""
+	}
+
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // QuickStart 按 Python quick_start 语义快速套用新手友好预设。
 func (o *FirefoxOptions) QuickStart(options FirefoxQuickStartOptions) *FirefoxOptions {
 	o.ensureDefaults()
+	if o.rejectAutoFPMutation("QuickStart") {
+		return o
+	}
 
 	if options.Port > 0 {
 		o.WithPort(options.Port)
@@ -612,6 +754,9 @@ func (o *FirefoxOptions) Validate() error {
 			o.loadMode,
 		)
 	}
+	if err := o.autoFPMutationError(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -642,7 +787,7 @@ func (o *FirefoxOptions) BuildCommand() ([]string, error) {
 		cmd = append(cmd, fmt.Sprintf("--fpfile=%s", o.fpfile))
 	}
 
-	cmd = append(cmd, cloneStringSlice(o.arguments)...)
+	cmd = append(cmd, o.buildArguments()...)
 	return cmd, nil
 }
 
@@ -784,19 +929,16 @@ func setDefaultPreference(prefs map[string]any, key string, value any) {
 }
 
 func applyProxyPreferences(prefs map[string]any, proxy string) {
-	scheme := "http"
-	address := proxy
-
-	if idx := strings.Index(proxy, "://"); idx >= 0 {
-		scheme = proxy[:idx]
-		address = proxy[idx+3:]
+	proxyURL, err := parseProxyURL(proxy)
+	if err != nil || proxyURL == nil {
+		return
 	}
 
-	host := address
-	port := "8080"
-	if idx := strings.LastIndex(address, ":"); idx >= 0 {
-		host = address[:idx]
-		port = address[idx+1:]
+	scheme := strings.ToLower(proxyURL.Scheme)
+	host := proxyURL.Hostname()
+	port := proxyURL.Port()
+	if port == "" {
+		port = "8080"
 	}
 
 	proxyPort, err := strconv.Atoi(port)
@@ -823,6 +965,106 @@ func applyProxyPreferences(prefs map[string]any, proxy string) {
 	prefs["network.proxy.ssl_port"] = proxyPort
 	setDefaultPreference(prefs, "signon.autologin.proxy", true)
 	setDefaultPreference(prefs, "network.auth.subresource-http-auth-allow", 2)
+}
+
+// SetManagedFPFile 标记当前 fpfile 为受托管自动文件，仅供内部生命周期与测试使用。
+func (o *FirefoxOptions) SetManagedFPFile(path string) {
+	o.ensureDefaults()
+	o.clearManagedFPFile(path)
+	o.fpfile = path
+	o.managedFPFile = path
+	o.managedFPFileAuto = path != ""
+}
+
+func (o *FirefoxOptions) clearManagedFPFile(nextPath string) {
+	if !o.managedFPFileAuto || o.managedFPFile == "" {
+		o.managedFPFile = ""
+		o.managedFPFileAuto = false
+		return
+	}
+	if nextPath != "" && sameCleanPath(o.managedFPFile, nextPath) {
+		return
+	}
+	_ = os.Remove(o.managedFPFile)
+	o.managedFPFile = ""
+	o.managedFPFileAuto = false
+}
+
+func (o *FirefoxOptions) buildArguments() []string {
+	args := cloneStringSlice(o.arguments)
+	if !o.autoFPFrozen {
+		return args
+	}
+	return replaceWindowSizeArguments(args, o.autoFPWindowWidth, o.autoFPWindowHeight)
+}
+
+func (o *FirefoxOptions) freezeAutoFP(width, height int) {
+	o.autoFPWindowWidth = width
+	o.autoFPWindowHeight = height
+	o.autoFPFrozen = true
+	o.autoFPInvalidMethod = ""
+	o.arguments = replaceWindowSizeArguments(o.arguments, width, height)
+}
+
+func (o *FirefoxOptions) rejectAutoFPMutation(method string) bool {
+	if !o.autoFPFrozen {
+		return false
+	}
+	if o.autoFPInvalidMethod == "" {
+		o.autoFPInvalidMethod = method
+	}
+	return true
+}
+
+func (o *FirefoxOptions) autoFPMutationError() error {
+	if !o.autoFPFrozen || o.autoFPInvalidMethod == "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"检测到在 WithAutoFPFile() 之后又调用了 %s()；调用 WithAutoFPFile() 后必须停止继续配置，请把 %s() 移到前面",
+		o.autoFPInvalidMethod,
+		o.autoFPInvalidMethod,
+	)
+}
+
+func (o *FirefoxOptions) resolveAutoFPWindowSize() (int, int) {
+	width := defaultQuickStartWidth
+	height := defaultQuickStartHeight
+	for _, argument := range o.arguments {
+		if value, ok := parsePositiveArgumentValue(argument, "--width="); ok {
+			width = value
+		}
+		if value, ok := parsePositiveArgumentValue(argument, "--height="); ok {
+			height = value
+		}
+	}
+	return width, height
+}
+
+func parsePositiveArgumentValue(argument string, prefix string) (int, bool) {
+	if !strings.HasPrefix(argument, prefix) {
+		return 0, false
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(argument, prefix)))
+	if err != nil || value <= 0 {
+		return 0, false
+	}
+	return value, true
+}
+
+func replaceWindowSizeArguments(arguments []string, width, height int) []string {
+	filtered := make([]string, 0, len(arguments))
+	for _, existing := range arguments {
+		if strings.HasPrefix(existing, "--width=") || strings.HasPrefix(existing, "--height=") {
+			continue
+		}
+		filtered = append(filtered, existing)
+	}
+
+	return append(filtered,
+		fmt.Sprintf("--width=%d", width),
+		fmt.Sprintf("--height=%d", height),
+	)
 }
 
 func readHTTPAuthFromFPFile(path string) (map[string]string, error) {

@@ -225,7 +225,7 @@ func (o *FirefoxOptions) Headless(on bool) *FirefoxOptions {
 	return o
 }
 
-// WithProxy 设置代理地址。
+// WithProxy 设置代理地址；若已调用 WithAutoFPFile，后续校验会报错。
 func (o *FirefoxOptions) WithProxy(proxy string) *FirefoxOptions {
 	o.raw().WithProxy(proxy)
 	return o
@@ -315,6 +315,14 @@ func (o *FirefoxOptions) WithFPFile(path string) *FirefoxOptions {
 	return o
 }
 
+// WithAutoFPFile 自动生成临时指纹配置文件，并读取当前配置后冻结后续修改。
+func (o *FirefoxOptions) WithAutoFPFile() (*FirefoxOptions, error) {
+	if _, err := o.raw().WithAutoFPFile(); err != nil {
+		return o, err
+	}
+	return o, nil
+}
+
 // PrivateMode 设置 Firefox 私密模式。
 func (o *FirefoxOptions) PrivateMode(on bool) *FirefoxOptions {
 	o.raw().PrivateMode(on)
@@ -339,7 +347,7 @@ func (o *FirefoxOptions) CloseBrowserOnExitEnabled(on bool) *FirefoxOptions {
 	return o
 }
 
-// WithWindowSize 通过启动参数设置窗口大小。
+// WithWindowSize 通过启动参数设置窗口大小；若已调用 WithAutoFPFile，后续校验会报错。
 func (o *FirefoxOptions) WithWindowSize(width, height int) *FirefoxOptions {
 	o.raw().WithWindowSize(width, height)
 	return o

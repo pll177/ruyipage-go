@@ -22,6 +22,82 @@
 
 ---
 
+## v1 最新更新：`WithAutoFPFile()` 先看这里
+
+`WithAutoFPFile()` 现在是**无参数** API，用来根据你**前面已经设置好的配置**自动生成临时 fpfile。
+
+当前规则：
+
+- `WithAutoFPFile()` 会读取调用前已经设置好的状态
+- 代理是可选的：传了 `WithProxy(...)` 就走代理，不传就走本机网络
+- 窗口大小优先读取前面设置的 `WithWindowSize(...)`
+- 如果前面没设置窗口大小，则默认使用 `1280 x 800`
+- 一旦调用了 `WithAutoFPFile()`，后面就不要再继续调用配置类方法；否则会在 `Validate()` / 启动阶段报错
+- 框架内部自动补的临时 profile、自动端口不算用户配置，不会误触发这条限制
+
+### 示例 1：本地直连，不走代理
+
+```go
+opts := ruyipage.NewFirefoxOptions().
+	Headless(false).
+	WithBrowserPath(`C:\Program Files\Mozilla Firefox\firefox.exe`).
+	WithWindowSize(1280, 800).
+	CloseBrowserOnExitEnabled(true)
+
+if _, err := opts.WithAutoFPFile(); err != nil {
+	panic(err)
+}
+
+page, err := ruyipage.NewFirefoxPage(opts)
+if err != nil {
+	panic(err)
+}
+defer func() {
+	_ = page.Quit(0, false)
+}()
+```
+
+### 示例 2：先设代理，再生成自动 fpfile
+
+```go
+opts := ruyipage.NewFirefoxOptions().
+	Headless(false).
+	WithBrowserPath(`C:\Program Files\Mozilla Firefox\firefox.exe`).
+	WithProxy("http://user:pass@proxy.example.com:7878").
+	WithWindowSize(1440, 900)
+
+if _, err := opts.WithAutoFPFile(); err != nil {
+	panic(err)
+}
+
+page, err := ruyipage.NewFirefoxPage(opts)
+if err != nil {
+	panic(err)
+}
+defer func() {
+	_ = page.Quit(0, false)
+}()
+```
+
+### 示例 3：错误写法（不要把配置放到后面）
+
+```go
+opts := ruyipage.NewFirefoxOptions().
+	WithBrowserPath(`C:\Program Files\Mozilla Firefox\firefox.exe`)
+
+if _, err := opts.WithAutoFPFile(); err != nil {
+	panic(err)
+}
+
+// 这里会导致后续校验/启动报错
+opts.WithWindowSize(1600, 900)
+opts.WithProxy("http://proxy.example.com:7878")
+```
+
+如果你已经有现成 fpfile，仍然可以继续使用 `WithFPFile(...)` 手工传入。
+
+---
+
 ## 安装与使用
 
 ### 安装

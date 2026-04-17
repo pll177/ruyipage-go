@@ -474,6 +474,11 @@ func (f *Firefox) Quit(timeout time.Duration, force bool) error {
 			firstErr = err
 		}
 	}
+	if f.options != nil {
+		if err := f.options.CleanupManagedFPFile(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
 
 	f.removeFromRegistry()
 	return firstErr
@@ -523,7 +528,7 @@ func prepareFirefoxOptions(options *config.FirefoxOptions) (*config.FirefoxOptio
 		if err != nil {
 			return nil, err
 		}
-		prepared.WithPort(port)
+		prepared.SetResolvedPort(port)
 	}
 
 	return prepared, nil
@@ -865,7 +870,7 @@ func (f *Firefox) launchBrowser() error {
 		if err != nil {
 			return support.NewBrowserLaunchError("创建 Firefox 临时 profile 失败", err)
 		}
-		f.options.WithProfile(autoProfile)
+		f.options.SetResolvedProfilePath(autoProfile)
 		f.mu.Lock()
 		f.autoProfile = autoProfile
 		f.mu.Unlock()
@@ -975,6 +980,9 @@ func (f *Firefox) handleManagedProcessExit(process *exec.Cmd) {
 	if autoProfile != "" {
 		_ = os.RemoveAll(autoProfile)
 	}
+	if f.options != nil {
+		_ = f.options.CleanupManagedFPFile()
+	}
 	f.removeFromRegistry()
 }
 
@@ -1000,7 +1008,7 @@ func (f *Firefox) ensureLaunchPortAvailable() error {
 	if err := f.rebindAddress(newAddress); err != nil {
 		return err
 	}
-	f.options.WithPort(newPort)
+	f.options.SetResolvedPort(newPort)
 	return nil
 }
 
