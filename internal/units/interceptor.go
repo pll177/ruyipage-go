@@ -6,6 +6,7 @@ import (
 
 	"github.com/pll177/ruyipage-go/internal/base"
 	"github.com/pll177/ruyipage-go/internal/bidi"
+	"github.com/pll177/ruyipage-go/internal/support"
 )
 
 // InterceptedRequest 表示一次被拦截的请求/响应。
@@ -23,17 +24,26 @@ type InterceptedRequest struct {
 	Phase           string
 	Status          int
 
-	driver    *base.BrowserBiDiDriver
-	collector *DataCollector
-	timeout   time.Duration
+	driver            *base.BrowserBiDiDriver
+	collector         *DataCollector
+	responseCollector *DataCollector
+	timeout           time.Duration
 
-	handled    bool
-	bodyLoaded bool
-	body       string
+	handled            bool
+	bodyLoaded         bool
+	body               string
+	responseBodyLoaded bool
+	responseBody       string
 }
 
 // NewInterceptedRequest 基于 BiDi 事件参数构建高层请求对象。
-func NewInterceptedRequest(params map[string]any, driver *base.BrowserBiDiDriver, collector *DataCollector, timeout time.Duration) *InterceptedRequest {
+func NewInterceptedRequest(
+	params map[string]any,
+	driver *base.BrowserBiDiDriver,
+	collector *DataCollector,
+	responseCollector *DataCollector,
+	timeout time.Duration,
+) *InterceptedRequest {
 	request, _ := params["request"].(map[string]any)
 	response, _ := params["response"].(map[string]any)
 
@@ -43,19 +53,20 @@ func NewInterceptedRequest(params map[string]any, driver *base.BrowserBiDiDriver
 	}
 
 	return &InterceptedRequest{
-		Raw:             cloneNetworkMapDeep(params),
-		Request:         cloneNetworkMapDeep(request),
-		Response:        cloneNetworkMapDeep(response),
-		RequestID:       stringifyNetworkValue(request["request"]),
-		URL:             stringifyNetworkValue(request["url"]),
-		Method:          stringifyNetworkValue(request["method"]),
-		Headers:         bidiHeadersToMap(request["headers"], false),
-		ResponseHeaders: bidiHeadersToMap(response["headers"], false),
-		Phase:           phase,
-		Status:          intNetworkValue(response["status"]),
-		driver:          driver,
-		collector:       collector,
-		timeout:         timeout,
+		Raw:               cloneNetworkMapDeep(params),
+		Request:           cloneNetworkMapDeep(request),
+		Response:          cloneNetworkMapDeep(response),
+		RequestID:         stringifyNetworkValue(request["request"]),
+		URL:               stringifyNetworkValue(request["url"]),
+		Method:            stringifyNetworkValue(request["method"]),
+		Headers:           bidiHeadersToMap(request["headers"], false),
+		ResponseHeaders:   bidiHeadersToMap(response["headers"], false),
+		Phase:             phase,
+		Status:            intNetworkValue(response["status"]),
+		driver:            driver,
+		collector:         collector,
+		responseCollector: responseCollector,
+		timeout:           timeout,
 	}
 }
 
@@ -78,6 +89,35 @@ func (r *InterceptedRequest) Body() string {
 	r.bodyLoaded = true
 	r.mu.Unlock()
 	return body
+}
+
+// ResponseBody 返回响应体文本；未启用 collectResponse 或暂无可读 body 时返回空字符串。
+func (r *InterceptedRequest) ResponseBody() string {
+	if r == nil {
+		return ""
+	}
+	r.mu.Lock()
+	if r.responseBodyLoaded {
+		defer r.mu.Unlock()
+		return r.responseBody
+	}
+	r.mu.Unlock()
+
+	body := r.loadResponseBody()
+
+	r.mu.Lock()
+	r.responseBody = body
+	r.responseBodyLoaded = true
+	r.mu.Unlock()
+	return body
+}
+
+// IsResponsePhase 返回当前拦截是否处于 responseStarted 阶段。
+func (r *InterceptedRequest) IsResponsePhase() bool {
+	if r == nil {
+		return false
+	}
+	return len(r.Response) > 0
 }
 
 // Handled 返回当前请求是否已经被处理。
@@ -105,7 +145,10 @@ func (r *InterceptedRequest) ContinueRequest(url string, method string, headers 
 		url,
 		r.resolveTimeout(),
 	)
-	return err
+	if err != nil {
+		return support.NewNetworkInterceptError("ContinueRequest 失败", err)
+	}
+	return nil
 }
 
 // Fail 直接中止当前请求。
@@ -114,7 +157,10 @@ func (r *InterceptedRequest) Fail() error {
 		return nil
 	}
 	_, err := bidi.FailRequest(r.driver, r.RequestID, r.resolveTimeout())
-	return err
+	if err != nil {
+		return support.NewNetworkInterceptError("FailRequest 失败", err)
+	}
+	return nil
 }
 
 // ContinueWithAuth 处理认证挑战。
@@ -131,7 +177,10 @@ func (r *InterceptedRequest) ContinueWithAuth(action string, username string, pa
 		}
 	}
 	_, err := bidi.ContinueWithAuth(r.driver, r.RequestID, action, credentials, r.resolveTimeout())
-	return err
+	if err != nil {
+		return support.NewNetworkInterceptError("ContinueWithAuth 失败", err)
+	}
+	return nil
 }
 
 // ContinueResponse 放行被拦截的响应并可选改写响应头与状态。
@@ -149,7 +198,10 @@ func (r *InterceptedRequest) ContinueResponse(headers any, reasonPhrase string, 
 		statusCode,
 		r.resolveTimeout(),
 	)
-	return err
+	if err != nil {
+		return support.NewNetworkInterceptError("ContinueResponse 失败", err)
+	}
+	return nil
 }
 
 // Mock 直接为当前请求提供模拟响应。
@@ -181,7 +233,10 @@ func (r *InterceptedRequest) Mock(body any, statusCode int, headers any, reasonP
 		&statusCode,
 		r.resolveTimeout(),
 	)
-	return err
+	if err != nil {
+		return support.NewNetworkInterceptError("ProvideResponse 失败", err)
+	}
+	return nil
 }
 
 func (r *InterceptedRequest) markHandled() bool {
@@ -214,30 +269,51 @@ func (r *InterceptedRequest) loadBody() string {
 	if body, ok := decodeNetworkBodyValue(r.Raw["body"]); ok {
 		return body
 	}
-	if r.collector == nil || r.RequestID == "" {
+	return loadCollectedBody(r.collector, r.RequestID, "request", 1, 0)
+}
+
+func (r *InterceptedRequest) loadResponseBody() string {
+	if r == nil {
 		return ""
 	}
-	data, err := r.collector.Get(r.RequestID, "request")
-	if err != nil || data == nil {
+	if body, ok := decodeNetworkBodyValue(r.Response["body"]); ok {
+		return body
+	}
+	return loadCollectedBody(r.responseCollector, r.RequestID, "response", 10, 300*time.Millisecond)
+}
+
+func loadCollectedBody(collector *DataCollector, requestID string, dataType string, attempts int, delay time.Duration) string {
+	if collector == nil || requestID == "" {
 		return ""
 	}
-	if body, ok := decodeNetworkBodyValue(data.Bytes); ok {
-		return body
+	if attempts <= 0 {
+		attempts = 1
 	}
-	if body, ok := decodeNetworkBodyValue(data.Base64); ok {
-		return body
-	}
-	if body, ok := decodeNetworkBodyValue(data.Raw["body"]); ok {
-		return body
-	}
-	if body, ok := decodeNetworkBodyValue(data.Raw["data"]); ok {
-		return body
-	}
-	if body, ok := decodeNetworkBodyValue(data.Raw["value"]); ok {
-		return body
-	}
-	if body, ok := decodeNetworkBodyValue(data.Raw); ok {
-		return body
+	for attempt := 0; attempt < attempts; attempt++ {
+		data, err := collector.Get(requestID, dataType)
+		if err == nil && data != nil {
+			if body, ok := decodeNetworkBodyValue(data.Bytes); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Base64); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw["body"]); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw["data"]); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw["value"]); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw); ok {
+				return body
+			}
+		}
+		if attempt+1 < attempts && delay > 0 {
+			time.Sleep(delay)
+		}
 	}
 	return ""
 }
@@ -246,14 +322,15 @@ func (r *InterceptedRequest) loadBody() string {
 type Interceptor struct {
 	owner networkOwner
 
-	mu               sync.RWMutex
-	active           bool
-	interceptID      string
-	subscriptionID   string
-	requestCollector *DataCollector
-	handler          func(*InterceptedRequest)
-	queue            *packetQueue[*InterceptedRequest]
-	phases           []string
+	mu                sync.RWMutex
+	active            bool
+	interceptID       string
+	subscriptionID    string
+	requestCollector  *DataCollector
+	responseCollector *DataCollector
+	handler           func(*InterceptedRequest)
+	queue             *packetQueue[*InterceptedRequest]
+	phases            []string
 }
 
 // NewInterceptor 创建网络拦截器。
@@ -275,7 +352,12 @@ func (i *Interceptor) Active() bool {
 }
 
 // Start 启动网络拦截。
-func (i *Interceptor) Start(handler func(*InterceptedRequest), urlPatterns []map[string]any, phases []string) (*Interceptor, error) {
+func (i *Interceptor) Start(
+	handler func(*InterceptedRequest),
+	urlPatterns []map[string]any,
+	phases []string,
+	collectResponse ...bool,
+) (*Interceptor, error) {
 	if i == nil {
 		return nil, nil
 	}
@@ -288,22 +370,30 @@ func (i *Interceptor) Start(handler func(*InterceptedRequest), urlPatterns []map
 	driver := i.owner.BrowserDriver()
 	callbackDriver := i.owner.Driver()
 	contexts := []string{i.owner.ContextID()}
+	collectResponseEnabled := len(collectResponse) > 0 && collectResponse[0]
 
-	var collector *DataCollector
+	manager := NewNetworkManager(i.owner)
+	var requestCollector *DataCollector
 	if hasString(phases, "beforeRequestSent") {
-		result, err := bidi.AddDataCollector(driver, []string{"beforeRequestSent"}, contexts, 0, []string{"request"}, timeout)
-		if err == nil {
-			collector = &DataCollector{
-				manager: NewNetworkManager(i.owner),
-				ID:      stringifyNetworkValue(result["collector"]),
-			}
+		if collector, err := manager.AddDataCollector([]string{"beforeRequestSent"}, []string{"request"}, 0); err == nil {
+			requestCollector = collector
+		}
+	}
+
+	var responseCollector *DataCollector
+	if collectResponseEnabled {
+		if collector, err := manager.AddDataCollector([]string{listenerResponseCompleted}, []string{"response"}, 0); err == nil {
+			responseCollector = collector
 		}
 	}
 
 	result, err := bidi.AddIntercept(driver, phases, urlPatterns, contexts, timeout)
 	if err != nil {
-		if collector != nil {
-			_ = collector.Remove()
+		if requestCollector != nil {
+			_ = requestCollector.Remove()
+		}
+		if responseCollector != nil {
+			_ = responseCollector.Remove()
 		}
 		return nil, err
 	}
@@ -324,8 +414,11 @@ func (i *Interceptor) Start(handler func(*InterceptedRequest), urlPatterns []map
 		subscription, err := bidi.Subscribe(driver, events, contexts, timeout)
 		if err != nil {
 			_, _ = bidi.RemoveIntercept(driver, stringifyNetworkValue(result["intercept"]), timeout)
-			if collector != nil {
-				_ = collector.Remove()
+			if requestCollector != nil {
+				_ = requestCollector.Remove()
+			}
+			if responseCollector != nil {
+				_ = responseCollector.Remove()
 			}
 			return nil, err
 		}
@@ -334,14 +427,14 @@ func (i *Interceptor) Start(handler func(*InterceptedRequest), urlPatterns []map
 
 	if hasString(phases, "beforeRequestSent") {
 		if err := callbackDriver.SetGlobalCallback(listenerBeforeRequestSent, i.onIntercept, false); err != nil {
-			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, collector)
+			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, requestCollector, responseCollector)
 			return nil, err
 		}
 	}
 	if hasString(phases, "responseStarted") {
-		if err := callbackDriver.SetGlobalCallback("network.responseStarted", i.onIntercept, false); err != nil {
+		if err := callbackDriver.SetGlobalCallback("network.responseStarted", i.onResponseIntercept, false); err != nil {
 			callbackDriver.RemoveGlobalCallback(listenerBeforeRequestSent, false)
-			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, collector)
+			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, requestCollector, responseCollector)
 			return nil, err
 		}
 	}
@@ -349,7 +442,7 @@ func (i *Interceptor) Start(handler func(*InterceptedRequest), urlPatterns []map
 		if err := callbackDriver.SetGlobalCallback("network.authRequired", i.onAuth, false); err != nil {
 			callbackDriver.RemoveGlobalCallback(listenerBeforeRequestSent, false)
 			callbackDriver.RemoveGlobalCallback("network.responseStarted", false)
-			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, collector)
+			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, requestCollector, responseCollector)
 			return nil, err
 		}
 	}
@@ -358,7 +451,8 @@ func (i *Interceptor) Start(handler func(*InterceptedRequest), urlPatterns []map
 	i.active = true
 	i.interceptID = stringifyNetworkValue(result["intercept"])
 	i.subscriptionID = subscriptionID
-	i.requestCollector = collector
+	i.requestCollector = requestCollector
+	i.responseCollector = responseCollector
 	i.handler = handler
 	i.queue = newPacketQueue[*InterceptedRequest](128)
 	i.phases = append([]string(nil), phases...)
@@ -367,13 +461,25 @@ func (i *Interceptor) Start(handler func(*InterceptedRequest), urlPatterns []map
 }
 
 // StartRequests 仅拦截 beforeRequestSent。
-func (i *Interceptor) StartRequests(handler func(*InterceptedRequest), urlPatterns []map[string]any) (*Interceptor, error) {
-	return i.Start(handler, urlPatterns, []string{"beforeRequestSent"})
+func (i *Interceptor) StartRequests(
+	handler func(*InterceptedRequest),
+	urlPatterns []map[string]any,
+	collectResponse ...bool,
+) (*Interceptor, error) {
+	return i.Start(handler, urlPatterns, []string{"beforeRequestSent"}, collectResponse...)
 }
 
 // StartResponses 仅拦截 responseStarted。
-func (i *Interceptor) StartResponses(handler func(*InterceptedRequest), urlPatterns []map[string]any) (*Interceptor, error) {
-	return i.Start(handler, urlPatterns, []string{"responseStarted"})
+func (i *Interceptor) StartResponses(
+	handler func(*InterceptedRequest),
+	urlPatterns []map[string]any,
+	collectResponse ...bool,
+) (*Interceptor, error) {
+	enabled := true
+	if len(collectResponse) > 0 {
+		enabled = collectResponse[0]
+	}
+	return i.Start(handler, urlPatterns, []string{"responseStarted"}, enabled)
 }
 
 // Stop 停止当前拦截。
@@ -385,12 +491,14 @@ func (i *Interceptor) Stop() {
 	i.mu.Lock()
 	interceptID := i.interceptID
 	subscriptionID := i.subscriptionID
-	collector := i.requestCollector
+	requestCollector := i.requestCollector
+	responseCollector := i.responseCollector
 	wasActive := i.active
 	i.active = false
 	i.interceptID = ""
 	i.subscriptionID = ""
 	i.requestCollector = nil
+	i.responseCollector = nil
 	i.handler = nil
 	i.phases = nil
 	i.mu.Unlock()
@@ -411,8 +519,11 @@ func (i *Interceptor) Stop() {
 	if subscriptionID != "" {
 		_ = bidi.Unsubscribe(i.owner.BrowserDriver(), nil, nil, []string{subscriptionID}, timeout)
 	}
-	if collector != nil {
-		_ = collector.Remove()
+	if requestCollector != nil {
+		_ = requestCollector.Remove()
+	}
+	if responseCollector != nil {
+		_ = responseCollector.Remove()
 	}
 }
 
@@ -428,7 +539,12 @@ func (i *Interceptor) Wait(timeout time.Duration) *InterceptedRequest {
 	return value
 }
 
-func (i *Interceptor) cleanupStart(interceptID string, subscriptionID string, collector *DataCollector) {
+func (i *Interceptor) cleanupStart(
+	interceptID string,
+	subscriptionID string,
+	requestCollector *DataCollector,
+	responseCollector *DataCollector,
+) {
 	timeout := i.resolveTimeout()
 	if interceptID != "" {
 		_, _ = bidi.RemoveIntercept(i.owner.BrowserDriver(), interceptID, timeout)
@@ -436,8 +552,11 @@ func (i *Interceptor) cleanupStart(interceptID string, subscriptionID string, co
 	if subscriptionID != "" {
 		_ = bidi.Unsubscribe(i.owner.BrowserDriver(), nil, nil, []string{subscriptionID}, timeout)
 	}
-	if collector != nil {
-		_ = collector.Remove()
+	if requestCollector != nil {
+		_ = requestCollector.Remove()
+	}
+	if responseCollector != nil {
+		_ = responseCollector.Remove()
 	}
 }
 
@@ -470,6 +589,15 @@ func (i *Interceptor) currentCollector() *DataCollector {
 	return i.requestCollector
 }
 
+func (i *Interceptor) currentResponseCollector() *DataCollector {
+	if i == nil {
+		return nil
+	}
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+	return i.responseCollector
+}
+
 func (i *Interceptor) isActive() bool {
 	if i == nil {
 		return false
@@ -483,7 +611,13 @@ func (i *Interceptor) onIntercept(params map[string]any) {
 	if !i.isActive() {
 		return
 	}
-	req := NewInterceptedRequest(params, i.owner.BrowserDriver(), i.currentCollector(), i.resolveTimeout())
+	req := NewInterceptedRequest(
+		params,
+		i.owner.BrowserDriver(),
+		i.currentCollector(),
+		i.currentResponseCollector(),
+		i.resolveTimeout(),
+	)
 	if handler := i.currentHandler(); handler != nil {
 		safeRunInterceptHandler(handler, req)
 		if !req.Handled() {
@@ -494,11 +628,38 @@ func (i *Interceptor) onIntercept(params map[string]any) {
 	i.queue.Push(req)
 }
 
+func (i *Interceptor) onResponseIntercept(params map[string]any) {
+	if !i.isActive() {
+		return
+	}
+	req := NewInterceptedRequest(
+		params,
+		i.owner.BrowserDriver(),
+		i.currentCollector(),
+		i.currentResponseCollector(),
+		i.resolveTimeout(),
+	)
+	if handler := i.currentHandler(); handler != nil {
+		safeRunInterceptHandler(handler, req)
+		if !req.Handled() {
+			_ = req.ContinueResponse(nil, "", nil)
+		}
+		return
+	}
+	i.queue.Push(req)
+}
+
 func (i *Interceptor) onAuth(params map[string]any) {
 	if !i.isActive() {
 		return
 	}
-	req := NewInterceptedRequest(params, i.owner.BrowserDriver(), i.currentCollector(), i.resolveTimeout())
+	req := NewInterceptedRequest(
+		params,
+		i.owner.BrowserDriver(),
+		i.currentCollector(),
+		i.currentResponseCollector(),
+		i.resolveTimeout(),
+	)
 	if handler := i.currentHandler(); handler != nil {
 		safeRunInterceptHandler(handler, req)
 		if !req.Handled() {

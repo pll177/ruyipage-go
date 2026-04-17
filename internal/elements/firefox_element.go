@@ -2,6 +2,7 @@ package elements
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"os"
@@ -27,6 +28,8 @@ type Owner interface {
 	BrowserDriver() *base.BrowserBiDiDriver
 	BaseTimeout() time.Duration
 	ScriptTimeout() time.Duration
+	RunJS(script string, args ...any) (any, error)
+	IsActionVisualEnabled() bool
 	ElementFindTimeout() time.Duration
 	FindElement(locator any, index int, timeout time.Duration, startNodes []map[string]any) (*FirefoxElement, error)
 	FindElements(locator any, timeout time.Duration, startNodes []map[string]any) ([]*FirefoxElement, error)
@@ -472,6 +475,9 @@ func (e *FirefoxElement) WithShadow(mode string) (*FirefoxElement, error) {
 func (e *FirefoxElement) ClickSelf(byJS bool, timeout time.Duration) error {
 	if byJS {
 		_, err := e.callOnSelfRaw("(el) => el.click()")
+		if err == nil {
+			_ = e.showJSClickVisual(0)
+		}
 		return err
 	}
 
@@ -654,6 +660,7 @@ func (e *FirefoxElement) Input(text any, clear bool, byJS bool) error {
 	}
 
 	if byJS {
+		_ = e.showJSInputVisual()
 		if clear {
 			if err := e.SetValue(""); err != nil {
 				return err
@@ -1923,6 +1930,98 @@ func (e *FirefoxElement) performPointerActions(pointerActions []map[string]any) 
 		},
 	}
 	_, err := bidi.PerformActions(e.browserDriver(), e.contextID(), actions, e.baseTimeout())
+	if err == nil {
+		_ = e.showPointerVisual(pointerActions)
+	}
+	return err
+}
+
+func (e *FirefoxElement) showPointerVisual(pointerActions []map[string]any) error {
+	if e == nil || e.Owner() == nil || !e.Owner().IsActionVisualEnabled() {
+		return nil
+	}
+
+	movePoints := make([][]int, 0, len(pointerActions))
+	jsParts := make([]string, 0, 4)
+	lastX := 0
+	lastY := 0
+	for _, action := range pointerActions {
+		switch action["type"] {
+		case "pointerMove":
+			lastX = intFromAny(action["x"])
+			lastY = intFromAny(action["y"])
+			movePoints = append(movePoints, []int{lastX, lastY})
+		case "pointerDown":
+			jsParts = append(jsParts, fmt.Sprintf("if(window.__ruyiAV)window.__ruyiAV.click(%d,%d,%d)", lastX, lastY, intFromAny(action["button"])))
+		}
+	}
+	if len(movePoints) > 0 {
+		payload, err := json.Marshal(movePoints)
+		if err == nil {
+			jsParts = append([]string{"if(window.__ruyiAV)window.__ruyiAV.moves(" + string(payload) + ")"}, jsParts...)
+		}
+	}
+	if len(jsParts) == 0 {
+		return nil
+	}
+	_, err := e.Owner().RunJS(strings.Join(jsParts, ";"))
+	return err
+}
+
+func (e *FirefoxElement) showJSClickVisual(button int) error {
+	if e == nil || e.Owner() == nil || !e.Owner().IsActionVisualEnabled() {
+		return nil
+	}
+	center, err := e.centerPoint(false)
+	if err != nil {
+		return err
+	}
+	x := center["x"]
+	y := center["y"]
+	_, err = e.Owner().RunJS(fmt.Sprintf("if(window.__ruyiAV){window.__ruyiAV.moves([[%d,%d]]);window.__ruyiAV.click(%d,%d,%d)}", x, y, x, y, button))
+	return err
+}
+
+func (e *FirefoxElement) showJSInputVisual() error {
+	if e == nil || e.Owner() == nil || !e.Owner().IsActionVisualEnabled() {
+		return nil
+	}
+	location, err := e.Location()
+	if err != nil {
+		return err
+	}
+	size, err := e.Size()
+	if err != nil {
+		return err
+	}
+	center, err := e.centerPoint(false)
+	if err != nil {
+		return err
+	}
+	rectPayload, err := json.Marshal(map[string]int{
+		"x":      location["x"],
+		"y":      location["y"],
+		"width":  size["width"],
+		"height": size["height"],
+	})
+	if err != nil {
+		return err
+	}
+	tag, _ := e.Tag()
+	labelPayload, err := json.Marshal(strings.TrimSpace(tag) + " input[js]")
+	if err != nil {
+		return err
+	}
+	script := fmt.Sprintf(
+		"if(window.__ruyiAV){window.__ruyiAV.moves([[%d,%d]]);window.__ruyiAV.click(%d,%d,0);window.__ruyiAV.highlight(%s,%s)}",
+		center["x"],
+		center["y"],
+		center["x"],
+		center["y"],
+		string(rectPayload),
+		string(labelPayload),
+	)
+	_, err = e.Owner().RunJS(script)
 	return err
 }
 

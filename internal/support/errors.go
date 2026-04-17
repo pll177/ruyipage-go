@@ -247,6 +247,36 @@ func (e *LocatorError) Unwrap() error {
 	return &e.RuyiPageError
 }
 
+type IncorrectURLError struct {
+	RuyiPageError
+}
+
+func NewIncorrectURLError(message string, cause error) *IncorrectURLError {
+	return &IncorrectURLError{RuyiPageError: newBaseError(message, cause)}
+}
+
+func (e *IncorrectURLError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return &e.RuyiPageError
+}
+
+type NetworkInterceptError struct {
+	RuyiPageError
+}
+
+func NewNetworkInterceptError(message string, cause error) *NetworkInterceptError {
+	return &NetworkInterceptError{RuyiPageError: newBaseError(message, cause)}
+}
+
+func (e *NetworkInterceptError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return &e.RuyiPageError
+}
+
 func newBaseError(message string, cause error) RuyiPageError {
 	return RuyiPageError{
 		Message: message,

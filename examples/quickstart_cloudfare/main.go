@@ -29,7 +29,7 @@ func run() error {
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("copilot.microsoft.com Cloudflare 测试")
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Printf("Firefox 路径: %s\n", exampleutil.FixedFirefoxPath)
+	fmt.Printf("Firefox 路径: %s\n", exampleutil.FirefoxPath())
 
 	fmt.Println("\n-> 访问 https://copilot.microsoft.com/ ...")
 	if err := page.Navigate("https://copilot.microsoft.com/", "none"); err != nil {

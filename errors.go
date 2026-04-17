@@ -31,4 +31,8 @@ type (
 	CanNotClickError = support.CanNotClickError
 	// LocatorError 表示定位器语法或格式错误。
 	LocatorError = support.LocatorError
+	// IncorrectURLError 表示 URL 格式错误。
+	IncorrectURLError = support.IncorrectURLError
+	// NetworkInterceptError 表示网络拦截失败。
+	NetworkInterceptError = support.NetworkInterceptError
 )

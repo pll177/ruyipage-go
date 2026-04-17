@@ -155,6 +155,11 @@ func (o *FirefoxOptions) IsXPathPickerEnabled() bool {
 	return o.raw().IsXPathPickerEnabled()
 }
 
+// IsActionVisualEnabled 返回是否启用鼠标行为可视化调试模式。
+func (o *FirefoxOptions) IsActionVisualEnabled() bool {
+	return o.raw().IsActionVisualEnabled()
+}
+
 // IsCloseBrowserOnExitEnabled 返回是否在当前 Go 进程退出时自动关闭由本进程启动的浏览器。
 func (o *FirefoxOptions) IsCloseBrowserOnExitEnabled() bool {
 	return o.raw().IsCloseBrowserOnExitEnabled()
@@ -319,6 +324,12 @@ func (o *FirefoxOptions) PrivateMode(on bool) *FirefoxOptions {
 // XPathPickerEnabled 设置是否启用 XPath picker。
 func (o *FirefoxOptions) XPathPickerEnabled(on bool) *FirefoxOptions {
 	o.raw().XPathPickerEnabled(on)
+	return o
+}
+
+// ActionVisualEnabled 设置是否启用鼠标行为可视化调试模式。
+func (o *FirefoxOptions) ActionVisualEnabled(on bool) *FirefoxOptions {
+	o.raw().ActionVisualEnabled(on)
 	return o
 }
 

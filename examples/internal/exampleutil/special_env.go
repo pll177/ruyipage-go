@@ -12,12 +12,15 @@ import (
 )
 
 const (
-	// FixedFirefoxPath 是本轮迁移要求固定写入示例的 Firefox 路径。
-	FixedFirefoxPath = `C:\Users\pll177\Desktop\core\firefox.exe`
-	// FixedProxySpec 是本轮迁移要求固定写入示例的代理串。
-	FixedProxySpec = `us.ipwo.net:7878:pll177_custom_zone_US:pll177`
-	// FixedAttachCommand 是接管已打开浏览器前需要手工执行的命令。
-	FixedAttachCommand = `"C:\Users\pll177\Desktop\core\firefox.exe" -remote-debugging-port 9222`
+	EnvFirefoxPath     = "RUYIPAGE_EXAMPLE_FIREFOX_PATH"
+	EnvAttachCommand   = "RUYIPAGE_EXAMPLE_ATTACH_COMMAND"
+	EnvProxyHost       = "RUYIPAGE_EXAMPLE_PROXY_HOST"
+	EnvProxyPort       = "RUYIPAGE_EXAMPLE_PROXY_PORT"
+	EnvProxyUsername   = "RUYIPAGE_EXAMPLE_PROXY_USERNAME"
+	EnvProxyPassword   = "RUYIPAGE_EXAMPLE_PROXY_PASSWORD"
+	DefaultFirefoxPath = `C:\Program Files\Mozilla Firefox\firefox.exe`
+	defaultProxyHost   = "proxy.example.com"
+	defaultProxyPort   = 8080
 )
 
 // CheckRow 表示结果表中的一行。
@@ -29,7 +32,21 @@ type CheckRow struct {
 
 // FixedVisibleOptions 返回显式绑定固定 Firefox 路径的可见浏览器配置。
 func FixedVisibleOptions() *ruyipage.FirefoxOptions {
-	return VisibleOptions().WithBrowserPath(FixedFirefoxPath)
+	return VisibleOptions().WithBrowserPath(FirefoxPath())
+}
+
+// FirefoxPath 返回示例当前使用的 Firefox 路径。
+func FirefoxPath() string {
+	return ResolveEnvPath(EnvFirefoxPath, DefaultFirefoxPath)
+}
+
+// AttachCommand 返回接管示例建议手工执行的启动命令。
+func AttachCommand() string {
+	command := strings.TrimSpace(os.Getenv(EnvAttachCommand))
+	if command != "" {
+		return command
+	}
+	return fmt.Sprintf(`"%s" -remote-debugging-port 9222`, FirefoxPath())
 }
 
 // AddCheck 向结果表追加一行。
@@ -53,17 +70,16 @@ func PrintChecks(rows []CheckRow) {
 	}
 }
 
-// FixedProxyParts 拆解固定代理串。
+// FixedProxyParts 返回示例代理配置；host/port 可回退到安全占位值，账号密码仅从环境变量读取。
 func FixedProxyParts() (host string, port int, username string, password string, err error) {
-	parts := strings.Split(FixedProxySpec, ":")
-	if len(parts) != 4 {
-		return "", 0, "", "", fmt.Errorf("固定代理串格式错误: %s", FixedProxySpec)
+	host = ResolveEnvPath(EnvProxyHost, defaultProxyHost)
+	port = ResolveEnvInt(EnvProxyPort, defaultProxyPort)
+	if port < 1 || port > 65535 {
+		return "", 0, "", "", fmt.Errorf("代理端口无效: %d", port)
 	}
-	portValue, convErr := strconv.Atoi(parts[1])
-	if convErr != nil {
-		return "", 0, "", "", fmt.Errorf("固定代理端口无效: %w", convErr)
-	}
-	return parts[0], portValue, parts[2], parts[3], nil
+	username = strings.TrimSpace(os.Getenv(EnvProxyUsername))
+	password = strings.TrimSpace(os.Getenv(EnvProxyPassword))
+	return host, port, username, password, nil
 }
 
 // FixedProxyURL 返回不含账号密码的 HTTP 代理地址。
@@ -80,6 +96,13 @@ func WriteFixedProxyFPFile(dir string) (string, error) {
 	_, _, username, password, err := FixedProxyParts()
 	if err != nil {
 		return "", err
+	}
+	if username == "" || password == "" {
+		return "", fmt.Errorf(
+			"请通过 %s 和 %s 提供代理认证信息",
+			EnvProxyUsername,
+			EnvProxyPassword,
+		)
 	}
 	if strings.TrimSpace(dir) == "" {
 		dir = os.TempDir()
@@ -102,6 +125,19 @@ func ResolveEnvPath(envKey string, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// ResolveEnvInt 返回环境变量指定的整数，否则使用 fallback。
+func ResolveEnvInt(envKey string, fallback int) int {
+	value := strings.TrimSpace(os.Getenv(envKey))
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 // PrintManualKeepOpen 输出“保持浏览器打开供人工观察”的统一说明。

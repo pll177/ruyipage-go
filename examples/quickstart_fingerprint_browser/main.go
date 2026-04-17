@@ -3,19 +3,21 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	ruyipage "github.com/pll177/ruyipage-go"
 	"github.com/pll177/ruyipage-go/examples/internal/exampleutil"
 )
-
-const defaultFPFile = `C:\Users\pll177\Desktop\core\profile1.txt`
 
 func main() {
 	exampleutil.RunMain(run)
 }
 
 func run() error {
-	fpfile := exampleutil.ResolveEnvPath("RUYIPAGE_EXAMPLE_FPFILE", defaultFPFile)
+	fpfile := strings.TrimSpace(os.Getenv("RUYIPAGE_EXAMPLE_FPFILE"))
+	if fpfile == "" {
+		return fmt.Errorf("请通过 RUYIPAGE_EXAMPLE_FPFILE 指定指纹浏览器 fpfile 路径")
+	}
 	if _, err := os.Stat(fpfile); err != nil {
 		return fmt.Errorf("请准备指纹浏览器 fpfile，并通过 RUYIPAGE_EXAMPLE_FPFILE 指定；当前路径=%s: %w", fpfile, err)
 	}
@@ -64,7 +66,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Firefox: %s\n", exampleutil.FixedFirefoxPath)
+	fmt.Printf("Firefox: %s\n", exampleutil.FirefoxPath())
 	fmt.Printf("fpfile: %s\n", fpfile)
 	fmt.Printf("屏幕设置覆盖,当前=%vx%v\n", screenWidth, screenHeight)
 	return nil

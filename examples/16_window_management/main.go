@@ -18,8 +18,9 @@ func run() error {
 	fmt.Println("测试16: 浏览器窗口管理")
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Println("说明: maximize/minimize/fullscreen/center 为可见浏览器行为，建议肉眼观察窗口变化。")
-
-	page, err := ruyipage.NewFirefoxPage(exampleutil.VisibleOptions())
+	ops := ruyipage.NewFirefoxOptions()
+	ops.WithBrowserPath("C:\\Users\\pll177\\Desktop\\core\\firefox.exe")
+	page, err := ruyipage.NewFirefoxPage(ops)
 	if err != nil {
 		return err
 	}

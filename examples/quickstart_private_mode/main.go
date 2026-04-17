@@ -48,7 +48,11 @@ func runWithOptions(userDir string) error {
 }
 
 func runWithLaunchStyle(userDir string) error {
-	page, err := quickLaunchLike(userDir, true)
+	page, err := ruyipage.Launch(ruyipage.FirefoxQuickStartOptions{
+		BrowserPath: exampleutil.FirefoxPath(),
+		UserDir:     userDir,
+		Private:     true,
+	})
 	if err != nil {
 		return err
 	}
@@ -64,14 +68,4 @@ func runWithLaunchStyle(userDir string) error {
 	fmt.Printf("[launch] title: %s\n", title)
 	fmt.Printf("[launch] url: %s\n", pageURL)
 	return nil
-}
-
-func quickLaunchLike(userDir string, private bool) (*ruyipage.FirefoxPage, error) {
-	options := ruyipage.NewFirefoxOptions()
-	options.QuickStart(ruyipage.DefaultFirefoxQuickStartOptions())
-	options.WithBrowserPath(exampleutil.FixedFirefoxPath)
-	options.Headless(false)
-	options.WithUserDir(userDir)
-	options.PrivateMode(private)
-	return ruyipage.NewFirefoxPage(options)
 }

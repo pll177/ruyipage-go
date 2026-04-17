@@ -9,7 +9,7 @@ import (
 
 func main() {
 	opt := ruyipage.NewFirefoxOptions()
-	opt.Headless(true)
+	opt.Headless(false)
 
 	opt.CloseBrowserOnExitEnabled(true)
 	page, err := ruyipage.NewFirefoxPage(opt)

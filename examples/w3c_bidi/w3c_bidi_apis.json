@@ -1,0 +1,135 @@
+{
+  "modules": [
+    "browser",
+    "browsingContext",
+    "emulation",
+    "input",
+    "log",
+    "network",
+    "script",
+    "session",
+    "storage",
+    "webExtension"
+  ],
+  "commands": {
+    "session": [
+      "session.status",
+      "session.new",
+      "session.end",
+      "session.subscribe",
+      "session.unsubscribe"
+    ],
+    "browser": [
+      "browser.close",
+      "browser.createUserContext",
+      "browser.getClientWindows",
+      "browser.getUserContexts",
+      "browser.removeUserContext",
+      "browser.setClientWindowState",
+      "browser.setDownloadBehavior"
+    ],
+    "browsingContext": [
+      "browsingContext.activate",
+      "browsingContext.captureScreenshot",
+      "browsingContext.close",
+      "browsingContext.create",
+      "browsingContext.getTree",
+      "browsingContext.handleUserPrompt",
+      "browsingContext.locateNodes",
+      "browsingContext.navigate",
+      "browsingContext.print",
+      "browsingContext.reload",
+      "browsingContext.setBypassCSP",
+      "browsingContext.setViewport",
+      "browsingContext.traverseHistory"
+    ],
+    "emulation": [
+      "emulation.setForcedColorsModeThemeOverride",
+      "emulation.setGeolocationOverride",
+      "emulation.setLocaleOverride",
+      "emulation.setNetworkConditions",
+      "emulation.setScreenSettingsOverride",
+      "emulation.setScreenOrientationOverride",
+      "emulation.setUserAgentOverride",
+      "emulation.setScriptingEnabled",
+      "emulation.setScrollbarTypeOverride",
+      "emulation.setTimezoneOverride",
+      "emulation.setTouchOverride"
+    ],
+    "network": [
+      "network.addDataCollector",
+      "network.addIntercept",
+      "network.continueRequest",
+      "network.continueResponse",
+      "network.continueWithAuth",
+      "network.disownData",
+      "network.failRequest",
+      "network.getData",
+      "network.provideResponse",
+      "network.removeDataCollector",
+      "network.removeIntercept",
+      "network.setCacheBehavior",
+      "network.setExtraHeaders"
+    ],
+    "script": [
+      "script.addPreloadScript",
+      "script.disown",
+      "script.callFunction",
+      "script.evaluate",
+      "script.getRealms",
+      "script.removePreloadScript"
+    ],
+    "storage": [
+      "storage.getCookies",
+      "storage.setCookie",
+      "storage.deleteCookies"
+    ],
+    "input": [
+      "input.performActions",
+      "input.releaseActions",
+      "input.setFiles"
+    ],
+    "webExtension": [
+      "webExtension.install",
+      "webExtension.uninstall"
+    ]
+  },
+  "events": {
+    "browsingContext": [
+      "browsingContext.contextCreated",
+      "browsingContext.contextDestroyed",
+      "browsingContext.navigationStarted",
+      "browsingContext.fragmentNavigated",
+      "browsingContext.historyUpdated",
+      "browsingContext.domContentLoaded",
+      "browsingContext.load",
+      "browsingContext.downloadWillBegin",
+      "browsingContext.downloadEnd",
+      "browsingContext.navigationAborted",
+      "browsingContext.navigationCommitted",
+      "browsingContext.navigationFailed",
+      "browsingContext.userPromptClosed",
+      "browsingContext.userPromptOpened"
+    ],
+    "network": [
+      "network.authRequired",
+      "network.beforeRequestSent",
+      "network.fetchError",
+      "network.responseCompleted",
+      "network.responseStarted"
+    ],
+    "script": [
+      "script.message",
+      "script.realmCreated",
+      "script.realmDestroyed"
+    ],
+    "log": [
+      "log.entryAdded"
+    ],
+    "input": [
+      "input.fileDialogOpened"
+    ]
+  },
+  "total_commands": 63,
+  "total_events": 24
+}

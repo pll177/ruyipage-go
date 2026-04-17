@@ -3,6 +3,7 @@ package adapter
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/pll177/ruyipage-go/internal/base"
@@ -262,6 +263,9 @@ func (s *BiDiServer) createSession(driver *base.BrowserBiDiDriver) (string, bool
 	result, err := bidi.New(driver, map[string]any{}, s.options.UserPromptHandler(), defaultBiDiServerCommandTimeout)
 	if err != nil {
 		return "", false, support.NewBrowserConnectError("创建 Firefox BiDi session 失败", err)
+	}
+	if strings.TrimSpace(result.SessionID) == "" {
+		return "", false, support.NewBrowserConnectError("创建 Firefox BiDi session 失败：未返回有效 session id", nil)
 	}
 	return result.SessionID, true, nil
 }

@@ -47,8 +47,12 @@ func run() error {
 	}()
 
 	fmt.Println("\n0. 已启用代理自动认证:")
-	fmt.Printf("   Firefox: %s\n", exampleutil.FixedFirefoxPath)
-	fmt.Printf("   代理串: %s\n", exampleutil.FixedProxySpec)
+	fmt.Printf("   Firefox: %s\n", exampleutil.FirefoxPath())
+	host, port, username, _, _ := exampleutil.FixedProxyParts()
+	fmt.Printf("   代理主机: %s:%d\n", host, port)
+	if username != "" {
+		fmt.Printf("   代理用户名: %s\n", username)
+	}
 	fmt.Printf("   代理URL: %s\n", proxyURL)
 	fmt.Printf("   fpfile: %s\n", fpfilePath)
 	fmt.Println("   认证信息将由内核从 fpfile 自动读取")

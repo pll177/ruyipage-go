@@ -1,8 +1,10 @@
 package units
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/pll177/ruyipage-go/internal/base"
@@ -13,6 +15,8 @@ type actionsOwner interface {
 	ContextID() string
 	BrowserDriver() *base.BrowserBiDiDriver
 	BaseTimeout() time.Duration
+	RunJS(script string, args ...any) (any, error)
+	IsActionVisualEnabled() bool
 }
 
 type viewportPointTarget interface {
@@ -315,6 +319,8 @@ func (a *Actions) Perform() error {
 		return nil
 	}
 
+	pointerCopy := cloneActionRows(a.pointerActions)
+	keyCopy := cloneActionRows(a.keyActions)
 	actions := make([]map[string]any, 0, 3)
 	if len(a.pointerActions) > 0 {
 		actions = append(actions, map[string]any{
@@ -346,6 +352,9 @@ func (a *Actions) Perform() error {
 	a.pointerActions = nil
 	a.keyActions = nil
 	a.wheelActions = nil
+	if err == nil {
+		a.sendVisualData(pointerCopy, keyCopy)
+	}
 	return err
 }
 
@@ -468,6 +477,42 @@ func (a *Actions) clickByButton(on any, button int) *Actions {
 		map[string]any{"type": "pointerUp", "button": button},
 	)
 	return a
+}
+
+func (a *Actions) sendVisualData(pointerActions []map[string]any, keyActions []map[string]any) {
+	if a == nil || a.owner == nil || !a.owner.IsActionVisualEnabled() {
+		return
+	}
+	if len(pointerActions) == 0 && len(keyActions) == 0 {
+		return
+	}
+
+	movePoints := make([][]int, 0, len(pointerActions))
+	clickParts := make([]string, 0, 4)
+	lastX, lastY := int(a.currentX), int(a.currentY)
+	for _, action := range pointerActions {
+		switch action["type"] {
+		case "pointerMove":
+			lastX = intFromActionAny(action["x"])
+			lastY = intFromActionAny(action["y"])
+			movePoints = append(movePoints, []int{lastX, lastY})
+		case "pointerDown":
+			clickParts = append(clickParts, fmt.Sprintf("if(window.__ruyiAV)window.__ruyiAV.click(%d,%d,%d)", lastX, lastY, intFromActionAny(action["button"])))
+		}
+	}
+
+	jsParts := make([]string, 0, len(clickParts)+1)
+	if len(movePoints) > 0 {
+		payload, err := json.Marshal(movePoints)
+		if err == nil {
+			jsParts = append(jsParts, "if(window.__ruyiAV)window.__ruyiAV.moves("+string(payload)+")")
+		}
+	}
+	jsParts = append(jsParts, clickParts...)
+	if len(jsParts) == 0 {
+		return
+	}
+	_, _ = a.owner.RunJS(strings.Join(jsParts, ";"))
 }
 
 func resolveActionPosition(target any, currentX float64, currentY float64) (float64, float64) {

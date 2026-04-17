@@ -151,6 +151,19 @@ const xpathPickerScript = `() => {
         panel: null,
         watchdogBound: false,
     };
+    if (!state.group || typeof state.group !== "object") {
+        state.group = {
+            items: [],
+            candidates: [],
+            selectedKey: "",
+            anchorName: "",
+            statusText: "",
+            commonXPath: "",
+            commonCss: "",
+            code: "",
+            diagnostics: [],
+        };
+    }
     topWindowRef.__ruyiXPathPicker__ = state;
 
     const localState = window.__ruyiXPathPickerLocal__ || {
@@ -236,6 +249,7 @@ const xpathPickerScript = `() => {
             "#" + PANEL_ID + " .ruyi-xpath-picker__value{color:#f8fafc;word-break:break-word;white-space:pre-wrap;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__value[data-code='true']{font-family:Consolas,'SFMono-Regular',monospace;font-size:11px;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__code-block{padding:12px;border-radius:12px;background:rgba(2,6,23,.5);border:1px solid rgba(148,163,184,.16);color:#e2e8f0;white-space:pre-wrap;word-break:break-word;font-family:Consolas,'SFMono-Regular',monospace;font-size:11px;line-height:1.6;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__hint{margin:0;color:rgba(191,219,254,.88);font-size:11px;line-height:1.6;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__copy{appearance:none;border:1px solid rgba(148,163,184,.18);border-radius:999px;padding:4px 8px;background:rgba(148,163,184,.12);color:#cbd5e1;cursor:pointer;font-size:10px;font-weight:700;line-height:1;white-space:nowrap;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__copy[data-copied='true']{background:rgba(34,197,94,.18);color:#dcfce7;border-color:rgba(34,197,94,.28);}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__actions{display:flex;gap:8px;margin-top:14px;}" +
@@ -245,9 +259,21 @@ const xpathPickerScript = `() => {
             "#" + PANEL_ID + " .ruyi-xpath-picker__button[disabled]{opacity:.45;cursor:not-allowed;transform:none;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__button--primary{background:rgba(59,130,246,.92);color:#eff6ff;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__button--secondary{background:rgba(15,23,42,.26);color:#e2e8f0;border:1px solid rgba(148,163,184,.18);}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__button--tiny{padding:6px 9px;font-size:11px;border-radius:999px;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__button--ghost," +
             "#" + PANEL_ID + " .ruyi-xpath-picker__button--icon{background:rgba(148,163,184,.18);color:#e2e8f0;}" +
             "#" + PANEL_ID + " .ruyi-xpath-picker__button--icon{min-width:34px;padding:8px 10px;border-radius:999px;line-height:1;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__group-list{display:grid;gap:8px;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__group-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 11px;border-radius:12px;background:rgba(15,23,42,.34);border:1px solid rgba(148,163,184,.14);}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__group-item-main{min-width:0;flex:1;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__group-item-title{font-weight:700;color:#f8fafc;word-break:break-word;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__group-item-sub{margin-top:4px;color:#cbd5e1;font-size:11px;word-break:break-word;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__strategy-list{display:grid;gap:8px;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__strategy-item{padding:10px 11px;border-radius:12px;background:rgba(15,23,42,.34);border:1px solid rgba(148,163,184,.14);cursor:pointer;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__strategy-item[data-active='true']{border-color:rgba(96,165,250,.55);background:rgba(30,41,59,.72);box-shadow:0 0 0 1px rgba(96,165,250,.18) inset;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__strategy-title{font-weight:700;color:#f8fafc;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__strategy-sub{margin-top:4px;color:#cbd5e1;font-size:11px;word-break:break-word;}" +
+            "#" + PANEL_ID + " .ruyi-xpath-picker__strategy-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:#93c5fd;}" +
             "#" + HIGHLIGHT_ID + "{position:absolute;display:none;border-radius:12px;border:2px solid rgba(96,165,250,.95);background:rgba(96,165,250,.12);box-shadow:0 0 0 1px rgba(255,255,255,.28),0 10px 30px rgba(37,99,235,.18);pointer-events:none;z-index:2147483646;}" +
             "@media (max-width:640px){" +
             "#" + PANEL_ID + "{right:12px;bottom:12px;width:calc(100vw - 24px);max-height:58vh;}" +
@@ -277,10 +303,12 @@ const xpathPickerScript = `() => {
                 '<div class="ruyi-xpath-picker__tabs">',
                 '  <button type="button" class="ruyi-xpath-picker__tab" data-tab="info" data-active="true">Info</button>',
                 '  <button type="button" class="ruyi-xpath-picker__tab" data-tab="ruyipage" data-active="false">ruyiPage代码生成</button>',
+                '  <button type="button" class="ruyi-xpath-picker__tab" data-tab="group" data-active="false">元素组</button>',
                 "</div>",
                 '<div class="ruyi-xpath-picker__meta" data-role="meta"></div>',
                 '<div class="ruyi-xpath-picker__actions">',
                 '  <button type="button" class="ruyi-xpath-picker__button ruyi-xpath-picker__button--primary" data-action="unlock" disabled>继续选择</button>',
+                '  <button type="button" class="ruyi-xpath-picker__button ruyi-xpath-picker__button--secondary" data-action="capture-group" disabled>捕获相似元素</button>',
                 '  <button type="button" class="ruyi-xpath-picker__button ruyi-xpath-picker__button--secondary" data-action="pause">暂停选择</button>',
                 '  <button type="button" class="ruyi-xpath-picker__button ruyi-xpath-picker__button--ghost" data-action="toggle">收起</button>',
                 "</div>",
@@ -288,6 +316,7 @@ const xpathPickerScript = `() => {
             document.documentElement.appendChild(panel);
 
             const unlockButton = panel.querySelector('[data-action="unlock"]');
+            const captureGroupButton = panel.querySelector('[data-action="capture-group"]');
             const pauseButton = panel.querySelector('[data-action="pause"]');
             const toggleButtons = panel.querySelectorAll('[data-action="toggle"]');
             const tabs = panel.querySelectorAll("[data-tab]");
@@ -306,6 +335,13 @@ const xpathPickerScript = `() => {
                     togglePaused();
                 });
             }
+            if (captureGroupButton) {
+                captureGroupButton.addEventListener("click", (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    captureGroup();
+                });
+            }
             toggleButtons.forEach((button) => {
                 button.addEventListener("click", (event) => {
                     event.preventDefault();
@@ -322,6 +358,27 @@ const xpathPickerScript = `() => {
                 });
             });
             panel.addEventListener("click", (event) => {
+                const strategyButton = event.target && event.target.closest ? event.target.closest("[data-group-strategy-key]") : null;
+                if (strategyButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    selectGroupStrategy(strategyButton.getAttribute("data-group-strategy-key") || "");
+                    return;
+                }
+                const removeButton = event.target && event.target.closest ? event.target.closest("[data-remove-group-index]") : null;
+                if (removeButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    removeGroupItem(Number.parseInt(removeButton.getAttribute("data-remove-group-index") || "-1", 10));
+                    return;
+                }
+                const clearGroupButton = event.target && event.target.closest ? event.target.closest("[data-clear-group]") : null;
+                if (clearGroupButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    clearGroup();
+                    return;
+                }
                 const copyButton = event.target && event.target.closest ? event.target.closest("[data-copy-value]") : null;
                 if (!copyButton) {
                     return;
@@ -1100,6 +1157,533 @@ const xpathPickerScript = `() => {
         return contextEntries;
     }
 
+    function getElementKeyFromData(data) {
+        if (!data) {
+            return "";
+        }
+        return String(data.absoluteXPath || data.relativeXPath || ((data.tag || "element") + "@" + String(data.centerX || 0) + "," + String(data.centerY || 0)));
+    }
+
+    function getElementKey(element) {
+        if (!isElementNode(element)) {
+            return "";
+        }
+        return getAbsoluteXPath(element) || getRelativeXPath(element) || (getElementName(element) + "@" + String(element.tagName || ""));
+    }
+
+    function evaluateXPathAll(doc, expr) {
+        if (!doc || !expr) {
+            return [];
+        }
+        try {
+            const snapshot = doc.evaluate(expr, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            const results = [];
+            for (let index = 0; index < snapshot.snapshotLength; index += 1) {
+                const item = snapshot.snapshotItem(index);
+                if (isElementNode(item)) {
+                    results.push(item);
+                }
+            }
+            return results;
+        } catch (error) {
+            return [];
+        }
+    }
+
+    function getCSSLocatorOnly(element) {
+        if (!isElementNode(element) || !element.tagName) {
+            return "";
+        }
+        if (element.id) {
+            return "#" + element.id;
+        }
+        const tag = element.tagName.toLowerCase();
+        const attrs = ["data-testid", "data-test", "data-qa", "name", "aria-label", "title", "role"];
+        for (let index = 0; index < attrs.length; index += 1) {
+            const attr = attrs[index];
+            const value = normalizeText(element.getAttribute(attr));
+            if (!value) {
+                continue;
+            }
+            const selector = tag + "[" + attr + "=" + escapeCSSValue(value) + "]";
+            if (countCSSMatches(element.ownerDocument, selector) === 1) {
+                return selector;
+            }
+        }
+        return "";
+    }
+
+    function dedupeElements(elements) {
+        const seen = {};
+        const unique = [];
+        (Array.isArray(elements) ? elements : []).forEach((element) => {
+            if (!isElementNode(element)) {
+                return;
+            }
+            const key = getElementKey(element);
+            if (!key || seen[key]) {
+                return;
+            }
+            seen[key] = true;
+            unique.push(element);
+        });
+        return unique;
+    }
+
+    function sameItemKeys(left, right) {
+        if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+            return false;
+        }
+        for (let index = 0; index < left.length; index += 1) {
+            if (left[index] !== right[index]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function makeCandidateKey(kind, value) {
+        return String(kind || "") + ":" + String(value || "");
+    }
+
+    function addGroupCandidate(store, candidate) {
+        if (!candidate || !candidate.value || !Array.isArray(candidate.elements)) {
+            return;
+        }
+        const elements = dedupeElements(candidate.elements);
+        if (elements.length < 2) {
+            return;
+        }
+        const key = makeCandidateKey(candidate.kind, candidate.value);
+        if (store[key]) {
+            return;
+        }
+        const itemKeys = elements.map((element) => getElementKey(element)).filter(Boolean).sort();
+        store[key] = {
+            key: key,
+            kind: candidate.kind,
+            strategy: candidate.strategy,
+            value: candidate.value,
+            elements: elements,
+            count: elements.length,
+            depth: candidate.depth || 0,
+            score: candidate.score || 0,
+            itemKeys: itemKeys,
+        };
+    }
+
+    function findBestCandidateByKind(candidates, kind, itemKeys) {
+        let matched = null;
+        let fallback = null;
+        (Array.isArray(candidates) ? candidates : []).forEach((candidate) => {
+            if (!candidate || candidate.kind !== kind) {
+                return;
+            }
+            if (!fallback || candidate.score > fallback.score) {
+                fallback = candidate;
+            }
+            if (Array.isArray(itemKeys) && sameItemKeys(candidate.itemKeys || [], itemKeys)) {
+                if (!matched || candidate.score > matched.score) {
+                    matched = candidate;
+                }
+            }
+        });
+        return matched || fallback;
+    }
+
+    function buildGroupCode(referenceData, group) {
+        if (!referenceData) {
+            return "// 锁定一个元素后，这里会生成元素组的 ruyiPage Go 示例代码";
+        }
+
+        const lines = [];
+        let currentVar = "page";
+        lines.push("// ruyiPage generated group snippet");
+        lines.push("// add: import time");
+
+        getFrameCodeEntries(referenceData).forEach((frameCode, index) => {
+            const frameVar = "frame" + String(index + 1);
+            const frameLocator = decodeFrameCodeLocator(frameCode);
+            if (frameLocator) {
+                lines.push(frameVar + ", _ := " + currentVar + ".GetFrame(" + quoteCode(frameLocator) + ")");
+                currentVar = frameVar;
+                return;
+            }
+            const frameIndex = decodeFrameCodeIndex(frameCode);
+            if (frameIndex >= 0) {
+                lines.push(frameVar + ", _ := " + currentVar + ".GetFrame(" + String(frameIndex) + ")");
+                currentVar = frameVar;
+                return;
+            }
+        });
+
+        const shadowPath = referenceData.shadowPath || [];
+        shadowPath.forEach((shadow, index) => {
+            const hostVar = "shadowHost" + String(index + 1);
+            const rootVar = "shadowRoot" + String(index + 1);
+            const hostLocator = shadow && shadow.locator ? shadow.locator : "";
+            if (hostLocator) {
+                lines.push(hostVar + ", _ := " + currentVar + ".Ele(" + quoteCode(hostLocator) + ", 1, 5*time.Second)");
+            } else {
+                lines.push("// 无法稳定还原 shadow host 定位，请手动确认");
+                lines.push(hostVar + " := /* locate host manually */");
+            }
+            if (shadow && shadow.mode === "closed") {
+                lines.push(rootVar + ", _ := " + hostVar + ".ClosedShadowRoot()");
+            } else {
+                lines.push(rootVar + ", _ := " + hostVar + ".ShadowRoot()");
+            }
+            currentVar = rootVar;
+        });
+
+        if (group && group.commonXPath) {
+            lines.push("items, _ := " + currentVar + ".Eles(" + quoteCode("xpath:" + group.commonXPath) + ", 5*time.Second)");
+        } else if (group && group.commonCss) {
+            lines.push("items, _ := " + currentVar + ".Eles(" + quoteCode(group.commonCss) + ", 5*time.Second)");
+        } else {
+            lines.push("// 暂未生成稳定的组选择器，请先在“元素组”页签里选择策略");
+            lines.push("items := []*ruyipage.FirefoxElement{}");
+        }
+        lines.push("for _, item := range items {");
+        lines.push('    text, _ := item.Text()');
+        lines.push('    fmt.Println(text)');
+        lines.push("}");
+        return lines.join("\n");
+    }
+
+    function buildManualUnionXPath(items) {
+        const parts = [];
+        (Array.isArray(items) ? items : []).forEach((item) => {
+            const expr = String(item && (item.absoluteXPath || item.relativeXPath) || "");
+            if (expr) {
+                parts.push(expr);
+            }
+        });
+        return parts.join(" | ");
+    }
+
+    function collectGroupItems(elements) {
+        return dedupeElements(elements).map((element) => collectElementData(element));
+    }
+
+    function applyGroupSelection(candidate, candidates, anchorElement) {
+        const chosen = candidate || null;
+        const groupItems = chosen ? collectGroupItems(chosen.elements) : [];
+        const itemKeys = groupItems.map((item) => getElementKeyFromData(item)).filter(Boolean).sort();
+        const bestXPath = findBestCandidateByKind(candidates, "xpath", itemKeys);
+        const bestCss = findBestCandidateByKind(candidates, "css", itemKeys);
+        const group = {
+            items: groupItems,
+            candidates: Array.isArray(candidates) ? candidates : [],
+            selectedKey: chosen ? chosen.key : "",
+            anchorName: anchorElement ? (getElementName(anchorElement) || "") : "",
+            statusText: groupItems.length >= 2 ? "已捕获 " + String(groupItems.length) + " 个相似元素" : "未推断到稳定的相似元素组",
+            commonXPath: bestXPath ? bestXPath.value : "",
+            commonCss: bestCss ? bestCss.value : "",
+            diagnostics: Array.isArray(candidates) ? candidates.map((item) => ({
+                kind: item.kind,
+                strategy: item.strategy,
+                value: item.value,
+                count: item.count,
+            })) : [],
+            code: "",
+        };
+        group.code = buildGroupCode(state.selectedData || state.hoverData, group);
+        state.group = group;
+        state.activeTab = "group";
+    }
+
+    function buildClassXPath(tagName, className) {
+        return getXPathNodeName({ tagName: tagName, namespaceURI: "http://www.w3.org/1999/xhtml", localName: tagName }) +
+            "[contains(concat(' ', normalize-space(@class), ' '), " + escapeXPathLiteral(" " + className + " ") + ")]";
+    }
+
+    function buildGroupCandidates(selectedElement) {
+        const store = {};
+        const diagnostics = [];
+        if (!isElementNode(selectedElement) || !selectedElement.ownerDocument) {
+            return { anchorElement: null, candidates: [], diagnostics: diagnostics };
+        }
+
+        const tagName = selectedElement.tagName.toLowerCase();
+        let anchorElement = null;
+        let current = selectedElement.parentElement;
+        let depth = 0;
+        while (current && depth < 5) {
+            const anchorXPath = getRelativeXPath(current) || getAbsoluteXPath(current);
+            const anchorCss = getCSSLocatorOnly(current);
+            if (!anchorElement && anchorXPath) {
+                anchorElement = current;
+            }
+            const children = Array.from(current.children).filter((item) => isElementNode(item));
+            const sameTagChildren = children.filter((item) => item.tagName && item.tagName.toLowerCase() === tagName);
+            if (anchorXPath && sameTagChildren.length >= 2) {
+                addGroupCandidate(store, {
+                    kind: "xpath",
+                    strategy: "同父同tag",
+                    value: anchorXPath + "/" + tagName,
+                    elements: sameTagChildren,
+                    depth: depth,
+                    score: sameTagChildren.length * 100 + 50 - depth * 20,
+                });
+                if (anchorCss) {
+                    addGroupCandidate(store, {
+                        kind: "css",
+                        strategy: "同父同tag",
+                        value: anchorCss + " > " + tagName,
+                        elements: sameTagChildren,
+                        depth: depth,
+                        score: sameTagChildren.length * 100 + 48 - depth * 20,
+                    });
+                }
+            }
+
+            const attrs = ["data-testid", "data-test", "data-qa", "data-group", "data-list", "role"];
+            attrs.forEach((attr) => {
+                const attrValue = normalizeText(selectedElement.getAttribute(attr));
+                if (!anchorXPath || !attrValue) {
+                    return;
+                }
+                const matches = sameTagChildren.filter((item) => normalizeText(item.getAttribute(attr)) === attrValue);
+                if (matches.length < 2) {
+                    return;
+                }
+                addGroupCandidate(store, {
+                    kind: "xpath",
+                    strategy: "属性 " + attr,
+                    value: anchorXPath + "/" + tagName + "[@" + attr + "=" + escapeXPathLiteral(attrValue) + "]",
+                    elements: matches,
+                    depth: depth,
+                    score: matches.length * 100 + 90 - depth * 20,
+                });
+                if (anchorCss) {
+                    addGroupCandidate(store, {
+                        kind: "css",
+                        strategy: "属性 " + attr,
+                        value: anchorCss + " > " + tagName + "[" + attr + "=" + escapeCSSValue(attrValue) + "]",
+                        elements: matches,
+                        depth: depth,
+                        score: matches.length * 100 + 88 - depth * 20,
+                    });
+                }
+            });
+
+            const classList = typeof selectedElement.className === "string"
+                ? selectedElement.className.trim().split(/\s+/).filter(Boolean).slice(0, 2)
+                : [];
+            classList.forEach((className) => {
+                if (!anchorXPath || !className) {
+                    return;
+                }
+                const matches = sameTagChildren.filter((item) => item.classList && item.classList.contains(className));
+                if (matches.length < 2) {
+                    return;
+                }
+                addGroupCandidate(store, {
+                    kind: "xpath",
+                    strategy: "class " + className,
+                    value: anchorXPath + "/" + tagName + "[contains(concat(' ', normalize-space(@class), ' '), " + escapeXPathLiteral(" " + className + " ") + ")]",
+                    elements: matches,
+                    depth: depth,
+                    score: matches.length * 100 + 72 - depth * 20,
+                });
+                if (anchorCss) {
+                    addGroupCandidate(store, {
+                        kind: "css",
+                        strategy: "class " + className,
+                        value: anchorCss + " > " + tagName + "." + className,
+                        elements: matches,
+                        depth: depth,
+                        score: matches.length * 100 + 70 - depth * 20,
+                    });
+                }
+            });
+
+            const descendants = dedupeElements(Array.from(current.querySelectorAll(tagName)));
+            if (anchorXPath && descendants.length >= 2 && descendants.length <= 24) {
+                addGroupCandidate(store, {
+                    kind: "xpath",
+                    strategy: "祖先后代同tag",
+                    value: anchorXPath + "//" + tagName,
+                    elements: descendants,
+                    depth: depth,
+                    score: descendants.length * 100 + 20 - depth * 20,
+                });
+                if (anchorCss) {
+                    addGroupCandidate(store, {
+                        kind: "css",
+                        strategy: "祖先后代同tag",
+                        value: anchorCss + " " + tagName,
+                        elements: descendants,
+                        depth: depth,
+                        score: descendants.length * 100 + 18 - depth * 20,
+                    });
+                }
+            }
+
+            current = current.parentElement;
+            depth += 1;
+        }
+
+        const candidates = Object.keys(store).map((key) => store[key]).sort((left, right) => right.score - left.score);
+        diagnostics.push({
+            kind: "meta",
+            strategy: "候选策略数",
+            value: String(candidates.length),
+            count: candidates.length,
+        });
+        return {
+            anchorElement: anchorElement || selectedElement.parentElement,
+            candidates: candidates,
+            diagnostics: diagnostics,
+        };
+    }
+
+    function captureGroup() {
+        const seed = localState.selectedElement;
+        if (!isElementNode(seed)) {
+            state.group.statusText = "先锁定一个元素，再点击“捕获相似元素”";
+            state.activeTab = "group";
+            syncTopUI();
+            return;
+        }
+        const result = buildGroupCandidates(seed);
+        if (!result.candidates.length) {
+            state.group = {
+                items: [],
+                candidates: [],
+                selectedKey: "",
+                anchorName: result.anchorElement ? getElementName(result.anchorElement) : "",
+                statusText: "未找到稳定的相似元素组，可尝试换一个列表项重新捕获",
+                commonXPath: "",
+                commonCss: "",
+                code: buildGroupCode(state.selectedData || state.hoverData, null),
+                diagnostics: result.diagnostics || [],
+            };
+            state.activeTab = "group";
+            syncTopUI();
+            return;
+        }
+        applyGroupSelection(result.candidates[0], result.candidates, result.anchorElement);
+        syncTopUI();
+    }
+
+    function selectGroupStrategy(key) {
+        if (!key || !state.group || !Array.isArray(state.group.candidates)) {
+            return;
+        }
+        const candidate = state.group.candidates.find((item) => item && item.key === key);
+        if (!candidate) {
+            return;
+        }
+        applyGroupSelection(candidate, state.group.candidates, localState.selectedElement ? localState.selectedElement.parentElement : null);
+        syncTopUI();
+    }
+
+    function removeGroupItem(index) {
+        if (!state.group || !Array.isArray(state.group.items) || index < 0 || index >= state.group.items.length) {
+            return;
+        }
+        const nextItems = state.group.items.filter((_, itemIndex) => itemIndex !== index);
+        if (!nextItems.length) {
+            clearGroup();
+            return;
+        }
+        state.group.items = nextItems;
+        state.group.selectedKey = "";
+        state.group.commonXPath = buildManualUnionXPath(nextItems);
+        state.group.commonCss = "";
+        state.group.statusText = nextItems.length >= 2
+            ? "已移除 1 项，当前保留 " + String(nextItems.length) + " 个元素"
+            : "当前仅剩 1 个元素，组选择器已退化为手工并集";
+        state.group.diagnostics = (state.group.diagnostics || []).concat([{
+            kind: "meta",
+            strategy: "manual removal",
+            value: "已改为并集 XPath",
+            count: nextItems.length,
+        }]);
+        state.group.code = buildGroupCode(state.selectedData || state.hoverData, state.group);
+        syncTopUI();
+    }
+
+    function clearGroup() {
+        state.group = {
+            items: [],
+            candidates: [],
+            selectedKey: "",
+            anchorName: "",
+            statusText: "",
+            commonXPath: "",
+            commonCss: "",
+            code: buildGroupCode(state.selectedData || state.hoverData, null),
+            diagnostics: [],
+        };
+        syncTopUI();
+    }
+
+    function renderStrategyList(group) {
+        const candidates = group && Array.isArray(group.candidates) ? group.candidates : [];
+        if (!candidates.length) {
+            return renderField("策略候选", "锁定一个列表项后，点击“捕获相似元素”生成组策略。", {});
+        }
+        return [
+            '<section class="ruyi-xpath-picker__field">',
+            '  <div class="ruyi-xpath-picker__field-header">',
+            '    <span class="ruyi-xpath-picker__label">策略候选</span>',
+            "  </div>",
+            '  <div class="ruyi-xpath-picker__strategy-list">',
+            candidates.map((candidate) => [
+                '<button type="button" class="ruyi-xpath-picker__strategy-item" data-group-strategy-key="' + escapeAttribute(candidate.key || "") + '" data-active="' + String((group.selectedKey || "") === (candidate.key || "")) + '">',
+                '  <div class="ruyi-xpath-picker__strategy-title">' + escapeHTML(String(candidate.kind || "").toUpperCase() + " / " + String(candidate.strategy || "")) + "</div>",
+                '  <div class="ruyi-xpath-picker__strategy-sub">' + escapeHTML(candidate.value || "") + "</div>",
+                '  <div class="ruyi-xpath-picker__strategy-meta"><span>数量 ' + escapeHTML(String(candidate.count || 0)) + "</span><span>深度 " + escapeHTML(String(candidate.depth || 0)) + "</span></div>",
+                "</button>",
+            ].join("")).join(""),
+            "  </div>",
+            "</section>",
+        ].join("");
+    }
+
+    function renderGroupItems(group) {
+        const items = group && Array.isArray(group.items) ? group.items : [];
+        const headerAction = items.length
+            ? '<button type="button" class="ruyi-xpath-picker__copy" data-clear-group="true">清空组</button>'
+            : "";
+        return [
+            '<section class="ruyi-xpath-picker__field">',
+            '  <div class="ruyi-xpath-picker__field-header">',
+            '    <span class="ruyi-xpath-picker__label">元素组结果</span>',
+            headerAction,
+            "  </div>",
+            items.length ? (
+                '<div class="ruyi-xpath-picker__group-list">' +
+                items.map((item, index) => [
+                    '<div class="ruyi-xpath-picker__group-item">',
+                    '  <div class="ruyi-xpath-picker__group-item-main">',
+                    '    <div class="ruyi-xpath-picker__group-item-title">' + escapeHTML(String(index + 1) + ". " + (item.name || item.tag || "element")) + "</div>",
+                    '    <div class="ruyi-xpath-picker__group-item-sub">' + escapeHTML(item.text || item.relativeXPath || item.absoluteXPath || "-") + "</div>",
+                    "  </div>",
+                    '  <button type="button" class="ruyi-xpath-picker__button ruyi-xpath-picker__button--secondary ruyi-xpath-picker__button--tiny" data-remove-group-index="' + String(index) + '">移除</button>',
+                    "</div>",
+                ].join("")).join("") +
+                "</div>"
+            ) : '<div class="ruyi-xpath-picker__value">暂无元素组结果</div>',
+            "</section>",
+        ].join("");
+    }
+
+    function renderGroupPanel(group) {
+        return [
+            renderField("状态", group && group.statusText ? group.statusText : "先锁定一个元素，再点击“捕获相似元素”。", {}),
+            renderField("组锚点", group && group.anchorName ? group.anchorName : "未解析到组锚点", {}),
+            renderField("组 XPath", group && group.commonXPath ? group.commonXPath : "未生成稳定组 XPath", { isCode: true, canCopy: !!(group && group.commonXPath), copyLabel: "复制组XPath" }),
+            renderField("组 CSS", group && group.commonCss ? group.commonCss : "未生成稳定组 CSS", { isCode: true, canCopy: !!(group && group.commonCss), copyLabel: "复制组CSS" }),
+            renderStrategyList(group),
+            renderGroupItems(group),
+            renderCodeField(group && group.code ? group.code : buildGroupCode(state.selectedData || state.hoverData, group)),
+        ].join("");
+    }
+
     function buildRuyiPageCode(data) {
         if (!data) {
             return "// 点击一个元素后，这里会生成 ruyiPage Go 示例代码";
@@ -1232,6 +1816,7 @@ const xpathPickerScript = `() => {
         const intro = panel.querySelector('[data-role="intro"]');
         const status = panel.querySelector('[data-role="status"]');
         const unlockButton = panel.querySelector('[data-action="unlock"]');
+        const captureGroupButton = panel.querySelector('[data-action="capture-group"]');
         const pauseButton = panel.querySelector('[data-action="pause"]');
         const toggleButtons = panel.querySelectorAll('[data-action="toggle"]');
         const tabs = panel.querySelectorAll("[data-tab]");
@@ -1253,6 +1838,9 @@ const xpathPickerScript = `() => {
         if (unlockButton) {
             unlockButton.disabled = state.mode !== "locked";
         }
+        if (captureGroupButton) {
+            captureGroupButton.disabled = !state.selectedData;
+        }
         if (pauseButton) {
             pauseButton.textContent = state.mode === "paused" ? "恢复选择" : "暂停选择";
         }
@@ -1263,20 +1851,28 @@ const xpathPickerScript = `() => {
                     ? "当前已暂停选择，点击“恢复选择”后可继续检查页面元素。"
                     : "移动鼠标可预览目标，点击页面元素后会锁定当前结果。";
             }
-            meta.innerHTML = "";
+            meta.innerHTML = state.activeTab === "group" ? renderGroupPanel(state.group) : "";
             return;
         }
 
         if (intro) {
-            intro.textContent = state.mode === "locked"
-                ? "当前结果已锁定，点击“继续选择”后可重新选择其他元素。"
-                : state.mode === "paused"
-                    ? "当前已暂停选择，保留最近一次锁定结果。"
-                    : "当前为预览态，点击元素后会锁定此结果。";
+            if (state.activeTab === "group") {
+                intro.textContent = "“元素组”页签会根据当前锁定元素推断相似元素列表，并允许切换组策略。";
+            } else {
+                intro.textContent = state.mode === "locked"
+                    ? "当前结果已锁定，点击“继续选择”后可重新选择其他元素。"
+                    : state.mode === "paused"
+                        ? "当前已暂停选择，保留最近一次锁定结果。"
+                        : "当前为预览态，点击元素后会锁定此结果。";
+            }
         }
 
         if (state.activeTab === "ruyipage") {
             meta.innerHTML = renderCodeField(buildRuyiPageCode(data));
+            return;
+        }
+        if (state.activeTab === "group") {
+            meta.innerHTML = renderGroupPanel(state.group);
             return;
         }
 
@@ -1295,8 +1891,10 @@ const xpathPickerScript = `() => {
         state.mode = "idle";
         state.selectedData = null;
         state.hoverData = null;
+        state.activeTab = "info";
         localState.selectedElement = null;
         localState.hoverElement = null;
+        clearGroup();
         if (localState.highlight) {
             localState.highlight.style.display = "none";
         }
@@ -1355,6 +1953,7 @@ const xpathPickerScript = `() => {
         }
         localState.selectedElement = target;
         state.selectedData = collectElementData(target);
+        clearGroup();
         state.mode = "locked";
         updateHighlight(target);
         syncTopUI();

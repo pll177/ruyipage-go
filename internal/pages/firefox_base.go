@@ -2,7 +2,9 @@ package pages
 
 import (
 	"encoding/base64"
+	stderrors "errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,7 +24,10 @@ const (
 	elementPollInterval = 200 * time.Millisecond
 )
 
-var xpathPickerPreloads sync.Map
+var (
+	xpathPickerPreloads  sync.Map
+	actionVisualPreloads sync.Map
+)
 
 type FirefoxBrowser interface {
 	Address() string
@@ -133,6 +138,8 @@ func (p *FirefoxBase) InitContext(browser FirefoxBrowser, contextID string) erro
 	}
 	_ = p.ensureXPathPickerPreload()
 	_ = p.reinjectXPathPickerIfNeeded()
+	_ = p.ensureActionVisualPreload()
+	_ = p.reinjectActionVisualIfNeeded()
 	return nil
 }
 
@@ -513,9 +520,17 @@ func (p *FirefoxBase) ReadyState() (string, error) {
 	return state, nil
 }
 
-func (p *FirefoxBase) Navigate(url string, wait string) error {
-	if url == "" {
-		return support.NewRuyiPageError("URL 不能为空", nil)
+func (p *FirefoxBase) Navigate(targetURL string, wait string) error {
+	targetURL = strings.TrimSpace(targetURL)
+	if targetURL == "" {
+		return support.NewIncorrectURLError("URL 不能为空", nil)
+	}
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		return support.NewIncorrectURLError(fmt.Sprintf("URL 格式错误: %s", targetURL), err)
+	}
+	if parsedURL.Scheme == "" {
+		return support.NewIncorrectURLError(fmt.Sprintf("URL 缺少 scheme: %s", targetURL), nil)
 	}
 	if err := p.ensureInitialized(); err != nil {
 		return err
@@ -524,18 +539,20 @@ func (p *FirefoxBase) Navigate(url string, wait string) error {
 		wait = loadModeWait(p.loadMode)
 	}
 	p.setLoadingState("loading", true)
-	if _, err := bidi.Navigate(p.browserDriver(), p.ContextID(), url, wait, p.pageLoadTimeout()); err != nil {
-		return err
+	_, navigateErr := bidi.Navigate(p.browserDriver(), p.ContextID(), targetURL, wait, p.pageLoadTimeout())
+	if navigateErr != nil && !isExpectedNavigationAbort(navigateErr) {
+		return navigateErr
 	}
-	if wait != "none" {
+	if navigateErr == nil && wait != "none" {
 		_, _ = p.ReadyState()
 	}
 	_ = p.reinjectXPathPickerIfNeeded()
+	_ = p.reinjectActionVisualIfNeeded()
 	return nil
 }
 
-func (p *FirefoxBase) Get(url string) error {
-	return p.Navigate(url, "")
+func (p *FirefoxBase) Get(targetURL string) error {
+	return p.Navigate(targetURL, "")
 }
 
 func (p *FirefoxBase) Activate() error {
@@ -554,13 +571,15 @@ func (p *FirefoxBase) Reload(ignoreCache bool, wait string) error {
 		wait = loadModeWait(p.loadMode)
 	}
 	p.setLoadingState("loading", true)
-	if _, err := bidi.Reload(p.browserDriver(), p.ContextID(), ignoreCache, wait, p.pageLoadTimeout()); err != nil {
-		return err
+	_, reloadErr := bidi.Reload(p.browserDriver(), p.ContextID(), ignoreCache, wait, p.pageLoadTimeout())
+	if reloadErr != nil && !isExpectedNavigationAbort(reloadErr) {
+		return reloadErr
 	}
-	if wait != "none" {
+	if reloadErr == nil && wait != "none" {
 		_, _ = p.ReadyState()
 	}
 	_ = p.reinjectXPathPickerIfNeeded()
+	_ = p.reinjectActionVisualIfNeeded()
 	return nil
 }
 
@@ -577,6 +596,7 @@ func (p *FirefoxBase) Back() error {
 		return err
 	}
 	_ = p.reinjectXPathPickerIfNeeded()
+	_ = p.reinjectActionVisualIfNeeded()
 	return nil
 }
 
@@ -589,6 +609,7 @@ func (p *FirefoxBase) Forward() error {
 		return err
 	}
 	_ = p.reinjectXPathPickerIfNeeded()
+	_ = p.reinjectActionVisualIfNeeded()
 	return nil
 }
 
@@ -865,7 +886,19 @@ func (p *FirefoxBase) SetCookie(cookie map[string]any) error {
 	if valueMap, ok := payload["value"].(map[string]any); !ok || valueMap["type"] == nil {
 		payload["value"] = support.SerializeBiDiValue(payload["value"])
 	}
-	_, err := bidi.SetCookie(p.browserDriver(), payload, map[string]any{"context": p.ContextID()}, p.baseTimeout())
+
+	var partition map[string]any
+	if p.shouldUseContextCookiePartition(payload) {
+		partition = map[string]any{"context": p.ContextID()}
+	}
+
+	if partition != nil {
+		if _, err := bidi.SetCookie(p.browserDriver(), payload, partition, p.baseTimeout()); err == nil {
+			return nil
+		}
+	}
+
+	_, err := bidi.SetCookie(p.browserDriver(), payload, nil, p.baseTimeout())
 	return err
 }
 
@@ -910,7 +943,11 @@ func (p *FirefoxBase) DeleteCookies(filter map[string]any) error {
 	if err := p.ensureInitialized(); err != nil {
 		return err
 	}
-	_, err := bidi.DeleteCookies(p.browserDriver(), cloneMap(filter), map[string]any{"context": p.ContextID()}, p.baseTimeout())
+	payload := cloneMap(filter)
+	if _, err := bidi.DeleteCookies(p.browserDriver(), payload, map[string]any{"context": p.ContextID()}, p.baseTimeout()); err == nil {
+		return nil
+	}
+	_, err := bidi.DeleteCookies(p.browserDriver(), payload, nil, p.baseTimeout())
 	return err
 }
 
@@ -1288,6 +1325,35 @@ func (p *FirefoxBase) reinjectXPathPickerIfNeeded() error {
 	return err
 }
 
+func (p *FirefoxBase) ensureActionVisualPreload() error {
+	options := p.options()
+	if options == nil || !options.IsActionVisualEnabled() {
+		return nil
+	}
+	key := p.xpathPickerKey()
+	if key == "" {
+		return nil
+	}
+	if _, exists := actionVisualPreloads.Load(key); exists {
+		return nil
+	}
+	result, err := bidi.AddPreloadScript(p.browserDriver(), actionVisualScript, nil, nil, "", p.baseTimeout())
+	if err != nil {
+		return err
+	}
+	actionVisualPreloads.Store(key, result.Script)
+	return nil
+}
+
+func (p *FirefoxBase) reinjectActionVisualIfNeeded() error {
+	options := p.options()
+	if options == nil || !options.IsActionVisualEnabled() {
+		return nil
+	}
+	_, err := p.RunJSExpr("(" + actionVisualScript + ")()")
+	return err
+}
+
 func (p *FirefoxBase) locateByTextFallback(text string, startNodes []map[string]any) ([]map[string]any, error) {
 	args := []any{text}
 	if len(startNodes) > 0 {
@@ -1343,6 +1409,11 @@ func (p *FirefoxBase) profilePath() string {
 // DefaultUserContext 返回当前页面配置中的默认 user context。
 func (p *FirefoxBase) DefaultUserContext() string {
 	return p.options().UserContext()
+}
+
+// IsActionVisualEnabled 返回当前页面是否启用鼠标行为可视化调试模式。
+func (p *FirefoxBase) IsActionVisualEnabled() bool {
+	return p.options().IsActionVisualEnabled()
 }
 
 // ApplyUserAgentOverride 通过 preload script 回退方式应用 UA 覆盖。
@@ -1510,6 +1581,24 @@ func secondsDuration(seconds float64) time.Duration {
 	return time.Duration(seconds * float64(time.Second))
 }
 
+func isExpectedNavigationAbort(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var bidiErr *support.BiDiError
+	if stderrors.As(err, &bidiErr) {
+		text := strings.ToUpper(strings.TrimSpace(
+			bidiErr.Code + " " + bidiErr.BiDiMessage + " " + bidiErr.Message,
+		))
+		if strings.Contains(text, "NS_BINDING_ABORTED") {
+			return true
+		}
+	}
+
+	return strings.Contains(strings.ToUpper(err.Error()), "NS_BINDING_ABORTED")
+}
+
 func parsePDFOptions(options map[string]any) (*bool, map[string]any, string, map[string]any, []string, *float64, *bool) {
 	if options == nil {
 		return nil, nil, "", nil, nil, nil, nil
@@ -1569,6 +1658,36 @@ func cookieInfoToMap(cookie units.CookieInfo) map[string]any {
 		result["expiry"] = cookie.Expiry
 	}
 	return result
+}
+
+func (p *FirefoxBase) shouldUseContextCookiePartition(cookie map[string]any) bool {
+	currentDomain := p.currentCookieDomain()
+	cookieDomain := normalizeCookieDomain(cookie["domain"])
+	if currentDomain == "" || cookieDomain == "" {
+		return false
+	}
+	return currentDomain == cookieDomain || strings.HasSuffix(currentDomain, "."+cookieDomain)
+}
+
+func (p *FirefoxBase) currentCookieDomain() string {
+	currentURL, err := p.URL()
+	if err != nil {
+		return ""
+	}
+	parsed, err := url.Parse(strings.TrimSpace(currentURL))
+	if err != nil {
+		return ""
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return ""
+	}
+	return normalizeCookieDomain(parsed.Hostname())
+}
+
+func normalizeCookieDomain(value any) string {
+	domain := strings.TrimSpace(stringify(value))
+	domain = strings.TrimPrefix(domain, ".")
+	return strings.ToLower(domain)
 }
 
 func cloneMapFromAny(value any) map[string]any {

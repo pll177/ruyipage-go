@@ -36,10 +36,23 @@ var (
 	newFirefoxPageFromBrowserForEntry  = internalpages.NewFirefoxPageFromBrowser
 )
 
-// Launch 使用 quick_start 默认预设启动 FirefoxPage。
-func Launch() (*FirefoxPage, error) {
+// Launch 使用 quick_start 默认预设启动 FirefoxPage；可选传一个快捷配置参数。
+func Launch(options ...FirefoxQuickStartOptions) (*FirefoxPage, error) {
+	if len(options) > 1 {
+		return nil, support.NewRuyiPageError("Launch 最多只接受一个 FirefoxQuickStartOptions 参数", nil)
+	}
+
+	quickStartOptions := DefaultFirefoxQuickStartOptions()
+	if len(options) == 1 {
+		quickStartOptions = options[0]
+		if quickStartOptions.Port == 0 {
+			quickStartOptions.Port = support.DefaultPort
+		}
+	}
+
 	opts := NewFirefoxOptions()
-	opts.QuickStart(DefaultFirefoxQuickStartOptions())
+	opts.WithPort(quickStartOptions.Port)
+	opts.QuickStart(quickStartOptions)
 	return newFirefoxPageForEntry(opts)
 }
 

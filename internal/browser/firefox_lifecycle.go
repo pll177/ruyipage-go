@@ -594,6 +594,13 @@ func (f *Firefox) connectOrLaunch() error {
 }
 
 func (f *Firefox) attachProbeInfo(info *ProbeInfo) error {
+	if info == nil || info.Driver == nil {
+		return support.NewBrowserConnectError("探测结果中缺少可复用的 BiDi 连接", nil)
+	}
+	if strings.TrimSpace(info.SessionID) == "" {
+		return support.NewBrowserConnectError("探测结果中缺少有效的 Firefox BiDi session", nil)
+	}
+
 	driver := info.Driver
 	info.Driver = nil
 
@@ -642,6 +649,7 @@ func (f *Firefox) tryConnect() (bool, error) {
 		_ = driver.Stop()
 		return false, err
 	}
+	driver.SetSessionID(sessionID)
 
 	if err := f.subscribeLifecycleEvents(driver); err != nil {
 		if ownsSession {
@@ -665,8 +673,6 @@ func (f *Firefox) tryConnect() (bool, error) {
 		f.contexts[context.Context] = context
 	}
 	f.mu.Unlock()
-
-	driver.SetSessionID(sessionID)
 	return true, nil
 }
 
@@ -687,6 +693,9 @@ func (f *Firefox) createSession(driver *base.BrowserBiDiDriver) (string, bool, e
 			}
 			return "", false, support.NewBrowserConnectError("创建 Firefox BiDi session 失败", err)
 		}
+		if strings.TrimSpace(result.SessionID) == "" {
+			return "", false, support.NewBrowserConnectError("创建 Firefox BiDi session 失败：未返回有效 session id", nil)
+		}
 		return result.SessionID, true, nil
 	}
 
@@ -701,6 +710,9 @@ func (f *Firefox) createSession(driver *base.BrowserBiDiDriver) (string, bool, e
 func (f *Firefox) subscribeLifecycleEvents(driver *base.BrowserBiDiDriver) error {
 	if driver == nil {
 		return support.NewBrowserConnectError("BrowserBiDiDriver 未初始化", nil)
+	}
+	if strings.TrimSpace(driver.SessionID()) == "" {
+		return support.NewBrowserConnectError("Firefox BiDi session 未初始化", nil)
 	}
 
 	events := []string{

@@ -78,7 +78,7 @@ func run() error {
 
 	fmt.Println(strings.Repeat("=", 72))
 	fmt.Println("示例42: XPath Picker 综合复杂场景展示页")
-	fmt.Printf("Firefox 路径: %s\n", exampleutil.FixedFirefoxPath)
+	fmt.Printf("Firefox 路径: %s\n", exampleutil.FirefoxPath())
 	fmt.Printf("本次独立调试地址: %s\n", debugAddress)
 	fmt.Printf("本次 session id: %s\n", sessionID)
 	fmt.Printf("本次 user_dir/profile: %s\n", profilePath)

@@ -21,8 +21,8 @@ func run() error {
 	fmt.Println(strings.Repeat("=", 60))
 
 	fmt.Println("1. 请先手工启动 Firefox 或 Firefox 指纹浏览器")
-	fmt.Println("   先执行以下固定命令，再运行本示例:")
-	fmt.Printf("   %s\n", exampleutil.FixedAttachCommand)
+	fmt.Println("   先执行以下命令，再运行本示例:")
+	fmt.Printf("   %s\n", exampleutil.AttachCommand())
 	fmt.Println("   本示例不会自动启动浏览器，只会扫描并接管已打开实例。")
 	fmt.Println("   若浏览器把固定端口改成随机端口，本示例会自动降级为按进程特征扫描。")
 

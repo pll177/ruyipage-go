@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	defaultFirefoxBrowserPath   = `C:\Users\pll177\Desktop\core\firefox.exe`
+	defaultFirefoxBrowserPath   = `C:\Program Files\Mozilla Firefox\firefox.exe`
 	defaultRetryTimes           = 10
 	defaultRetryIntervalSeconds = 2.0
 	defaultQuickStartWidth      = 1280
@@ -41,11 +41,13 @@ type FirefoxTimeouts struct {
 
 // FirefoxQuickStartOptions 表示 QuickStart 的快捷预设输入。
 type FirefoxQuickStartOptions struct {
+	Port            int
 	BrowserPath     string
 	UserDir         string
 	Private         bool
 	Headless        bool
 	XPathPicker     bool
+	ActionVisual    bool
 	WindowWidth     int
 	WindowHeight    int
 	TimeoutBase     float64
@@ -63,28 +65,29 @@ type ProxyAuthCredentials struct {
 type FirefoxOptions struct {
 	initialized bool
 
-	browserPath        string
-	host               string
-	port               int
-	profilePath        string
-	arguments          []string
-	preferences        map[string]any
-	headless           bool
-	downloadPath       string
-	loadMode           FirefoxLoadMode
-	timeouts           FirefoxTimeouts
-	existingOnly       bool
-	retryTimes         int
-	retryInterval      float64
-	proxy              string
-	autoPortEnabled    bool
-	autoPortStart      int
-	userContext        string
-	fpfile             string
-	privateMode        bool
-	userPromptHandler  map[string]string
-	xpathPickerEnabled bool
-	closeBrowserOnExit bool
+	browserPath         string
+	host                string
+	port                int
+	profilePath         string
+	arguments           []string
+	preferences         map[string]any
+	headless            bool
+	downloadPath        string
+	loadMode            FirefoxLoadMode
+	timeouts            FirefoxTimeouts
+	existingOnly        bool
+	retryTimes          int
+	retryInterval       float64
+	proxy               string
+	autoPortEnabled     bool
+	autoPortStart       int
+	userContext         string
+	fpfile              string
+	privateMode         bool
+	userPromptHandler   map[string]string
+	xpathPickerEnabled  bool
+	actionVisualEnabled bool
+	closeBrowserOnExit  bool
 }
 
 // NewFirefoxOptions 返回带 Python 对齐默认值的配置对象。
@@ -97,6 +100,7 @@ func NewFirefoxOptions() *FirefoxOptions {
 // DefaultFirefoxQuickStartOptions 返回与 Python quick_start 对齐的默认预设。
 func DefaultFirefoxQuickStartOptions() FirefoxQuickStartOptions {
 	return FirefoxQuickStartOptions{
+		Port:            support.DefaultPort,
 		WindowWidth:     defaultQuickStartWidth,
 		WindowHeight:    defaultQuickStartHeight,
 		TimeoutBase:     float64(support.DefaultBaseTimeoutSeconds),
@@ -253,6 +257,12 @@ func (o *FirefoxOptions) UserPromptHandler() map[string]string {
 func (o *FirefoxOptions) IsXPathPickerEnabled() bool {
 	o.ensureDefaults()
 	return o.xpathPickerEnabled
+}
+
+// IsActionVisualEnabled 返回是否启用鼠标行为可视化调试模式。
+func (o *FirefoxOptions) IsActionVisualEnabled() bool {
+	o.ensureDefaults()
+	return o.actionVisualEnabled
 }
 
 // IsCloseBrowserOnExitEnabled 返回是否在当前 Go 进程退出时自动关闭由本进程启动的浏览器。
@@ -500,6 +510,13 @@ func (o *FirefoxOptions) XPathPickerEnabled(on bool) *FirefoxOptions {
 	return o
 }
 
+// ActionVisualEnabled 设置是否启用鼠标行为可视化调试模式。
+func (o *FirefoxOptions) ActionVisualEnabled(on bool) *FirefoxOptions {
+	o.ensureDefaults()
+	o.actionVisualEnabled = on
+	return o
+}
+
 // CloseBrowserOnExitEnabled 设置是否在当前 Go 进程退出时自动关闭由本进程启动的浏览器。
 func (o *FirefoxOptions) CloseBrowserOnExitEnabled(on bool) *FirefoxOptions {
 	o.ensureDefaults()
@@ -530,6 +547,9 @@ func (o *FirefoxOptions) WithWindowSize(width, height int) *FirefoxOptions {
 func (o *FirefoxOptions) QuickStart(options FirefoxQuickStartOptions) *FirefoxOptions {
 	o.ensureDefaults()
 
+	if options.Port > 0 {
+		o.WithPort(options.Port)
+	}
 	if options.BrowserPath != "" {
 		o.WithBrowserPath(options.BrowserPath)
 	}
@@ -540,6 +560,7 @@ func (o *FirefoxOptions) QuickStart(options FirefoxQuickStartOptions) *FirefoxOp
 	o.PrivateMode(options.Private)
 	o.Headless(options.Headless)
 	o.XPathPickerEnabled(options.XPathPicker)
+	o.ActionVisualEnabled(options.ActionVisual)
 
 	width := options.WindowWidth
 	height := options.WindowHeight

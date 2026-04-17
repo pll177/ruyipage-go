@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>action_visual 鼠标专用演示页</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: linear-gradient(180deg, #f6f8fc 0%, #edf2ff 100%);
+      color: #1f2937;
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 28px 24px 80px;
+    }
+    .hero {
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid #dbe4ff;
+      border-radius: 22px;
+      padding: 24px;
+      box-shadow: 0 18px 44px rgba(37, 99, 235, 0.10);
+      margin-bottom: 18px;
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+    }
+    .hero p {
+      margin: 0;
+      color: #475569;
+      line-height: 1.7;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid #dbe4ff;
+      border-radius: 20px;
+      padding: 20px;
+      min-height: 210px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+    }
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 18px;
+    }
+    .targets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+    .target-btn {
+      min-width: 170px;
+      height: 74px;
+      border: 0;
+      border-radius: 18px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+      box-shadow: 0 14px 30px rgba(37, 99, 235, 0.18);
+    }
+    #click-btn { background: linear-gradient(135deg, #2563eb, #4f46e5); }
+    #double-click-btn { background: linear-gradient(135deg, #7c3aed, #c026d3); }
+    #right-click-btn { background: linear-gradient(135deg, #ea580c, #ef4444); }
+    #js-click-btn { background: linear-gradient(135deg, #059669, #0ea5e9); }
+    #hover-target {
+      height: 120px;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+      border: 1px solid #93c5fd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: #1d4ed8;
+    }
+    #draggable {
+      width: 120px;
+      height: 120px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #34d399, #14b8a6);
+      color: #083344;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      user-select: none;
+      cursor: grab;
+      box-shadow: 0 16px 30px rgba(20, 184, 166, 0.22);
+    }
+    #drop-zone {
+      height: 180px;
+      border-radius: 24px;
+      border: 3px dashed #60a5fa;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #1d4ed8;
+      font-weight: 700;
+      background: rgba(191, 219, 254, 0.35);
+      margin-top: 18px;
+    }
+    .input-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    #email-input {
+      width: min(480px, 100%);
+      height: 56px;
+      border-radius: 16px;
+      border: 1px solid #cbd5e1;
+      padding: 0 16px;
+      font-size: 16px;
+      background: #fff;
+    }
+    .js-note {
+      margin-top: 12px;
+      color: #475569;
+    }
+    #event-log {
+      margin-top: 18px;
+      min-height: 84px;
+      border-radius: 16px;
+      background: #0f172a;
+      color: #dbeafe;
+      padding: 14px 16px;
+      font: 13px/1.6 Consolas, monospace;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 880px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <h1>action_visual 鼠标专用演示页</h1>
+      <p>这个页面只用于演示 BiDi 鼠标动作和框架内置 JS 鼠标动作的可视化反馈，包括轨迹、点击闪烁、鼠标坐标和目标高亮。</p>
+    </div>
+
+    <div class="grid">
+      <section class="card" id="button-section">
+        <h2>点击目标</h2>
+        <div class="targets">
+          <button id="click-btn" class="target-btn">标准点击</button>
+          <button id="double-click-btn" class="target-btn">双击目标</button>
+          <button id="right-click-btn" class="target-btn">右键目标</button>
+          <button id="js-click-btn" class="target-btn">JS 点击目标</button>
+        </div>
+        <div class="js-note">`#js-click-btn` 用于展示 `ClickSelf(true)` 的可视化效果。</div>
+      </section>
+
+      <section class="card">
+        <h2>悬停与拖拽</h2>
+        <div id="hover-target">悬停目标区域</div>
+        <div id="draggable" draggable="true">拖我</div>
+        <div id="drop-zone">拖放目标区域</div>
+      </section>
+
+      <section class="card" id="form-section">
+        <h2>JS 输入目标</h2>
+        <div class="input-row">
+          <input id="email-input" type="email" placeholder="用于 Input(..., byJS=true) 演示" />
+        </div>
+        <div class="js-note">这里只保留鼠标定位与目标高亮，不显示键盘内容。</div>
+      </section>
+
+      <section class="card">
+        <h2>事件日志</h2>
+        <div id="event-log">等待动作...</div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const logEl = document.getElementById("event-log");
+    function log(text) {
+      logEl.textContent = text + "\n" + logEl.textContent;
+    }
+
+    document.getElementById("click-btn").addEventListener("click", () => log("click-btn: click"));
+    document.getElementById("double-click-btn").addEventListener("dblclick", () => log("double-click-btn: dblclick"));
+    document.getElementById("right-click-btn").addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      log("right-click-btn: contextmenu");
+    });
+    document.getElementById("js-click-btn").addEventListener("click", () => log("js-click-btn: click"));
+    document.getElementById("hover-target").addEventListener("mouseenter", () => log("hover-target: mouseenter"));
+
+    const draggable = document.getElementById("draggable");
+    const dropZone = document.getElementById("drop-zone");
+    draggable.addEventListener("dragstart", () => log("draggable: dragstart"));
+    dropZone.addEventListener("dragover", (event) => event.preventDefault());
+    dropZone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      log("drop-zone: drop");
+    });
+  </script>
+</body>
+</html>
