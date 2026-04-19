@@ -37,6 +37,32 @@
 
 ---
 
+## 更新到最新版本
+
+如果你项目里已经安装过旧版本，直接在你的项目目录执行：
+
+```bash
+go get -u github.com/pll177/ruyipage-go
+go mod tidy
+```
+
+如果本机 Go proxy / module cache 还没刷新，先清缓存再更新：
+
+```bash
+go clean -modcache
+go get -u github.com/pll177/ruyipage-go
+go mod tidy
+```
+
+说明：
+
+- 现在开始使用标准 Go module 版本标签，后续正常用 `go get -u github.com/pll177/ruyipage-go` 即可
+- 不需要再手动写 commit hash
+- 不需要再临时写 `@main`
+- 如果你之前拉到的是旧的伪版本，执行上面两组命令之一即可切到新版本
+
+---
+
 ## v1 最新更新：`WithAutoFPFile()` 先看这里
 
 `WithAutoFPFile()` 现在是**无参数** API，用来根据你**前面已经设置好的配置**自动生成临时 fpfile。
