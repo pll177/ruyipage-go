@@ -3,8 +3,10 @@ package browser
 import (
 	stderrors "errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +31,76 @@ var (
 	firefoxRegistry   = make(map[string]*Firefox)
 )
 
+var firefoxAutoPortCoordinator = newFirefoxAutoPortRegistry()
+
+type firefoxAutoPortRegistry struct {
+	mu       sync.Mutex
+	reserved map[string]struct{}
+	active   map[string]struct{}
+}
+
+func newFirefoxAutoPortRegistry() *firefoxAutoPortRegistry {
+	return &firefoxAutoPortRegistry{
+		reserved: make(map[string]struct{}),
+		active:   make(map[string]struct{}),
+	}
+}
+
+func (r *firefoxAutoPortRegistry) reserve(host string, start int) (string, int, error) {
+	if start < 1 {
+		start = support.DefaultPort
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for port := start; port < start+100; port++ {
+		address := fmt.Sprintf("%s:%d", host, port)
+		if _, exists := r.reserved[address]; exists {
+			continue
+		}
+		if _, exists := r.active[address]; exists {
+			continue
+		}
+
+		listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+		if err != nil {
+			continue
+		}
+		_ = listener.Close()
+
+		r.reserved[address] = struct{}{}
+		return address, port, nil
+	}
+
+	return "", 0, support.NewBrowserLaunchError(
+		fmt.Sprintf("在端口范围 %d-%d 中找不到可用调试端口", start, start+99),
+		support.ErrNoFreePort,
+	)
+}
+
+func (r *firefoxAutoPortRegistry) activate(address string) {
+	if address == "" {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.reserved, address)
+	r.active[address] = struct{}{}
+}
+
+func (r *firefoxAutoPortRegistry) release(address string) {
+	if address == "" {
+		return
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.reserved, address)
+	delete(r.active, address)
+}
+
 // Firefox 承接浏览器启动、连接、attach、tab 基础管理与退出清理。
 type Firefox struct {
 	mu     sync.RWMutex
@@ -49,6 +121,7 @@ type Firefox struct {
 	contexts      map[string]ProbeContextInfo
 	clientWindows []map[string]any
 	autoProfile   string
+	autoPortLease string
 	quitting      bool
 }
 
@@ -57,6 +130,14 @@ func NewFirefox(options *config.FirefoxOptions) (*Firefox, error) {
 	prepared, err := prepareFirefoxOptions(options)
 	if err != nil {
 		return nil, err
+	}
+
+	if requiresAutoPortReservation(prepared) {
+		_, port, reserveErr := firefoxAutoPortCoordinator.reserve(prepared.Host(), resolveFirefoxAutoPortStart(prepared))
+		if reserveErr != nil {
+			return nil, reserveErr
+		}
+		prepared.SetResolvedPort(port)
 	}
 
 	address := prepared.Address()
@@ -71,6 +152,9 @@ func NewFirefox(options *config.FirefoxOptions) (*Firefox, error) {
 	}
 
 	instance := newFirefoxInstance(prepared)
+	if requiresAutoPortReservation(prepared) {
+		instance.autoPortLease = address
+	}
 	firefoxRegistry[address] = instance
 	firefoxRegistryMu.Unlock()
 
@@ -481,6 +565,7 @@ func (f *Firefox) Quit(timeout time.Duration, force bool) error {
 	}
 
 	f.removeFromRegistry()
+	f.releaseAutoPortLease()
 	return firstErr
 }
 
@@ -518,19 +603,6 @@ func prepareFirefoxOptions(options *config.FirefoxOptions) (*config.FirefoxOptio
 		return nil, err
 	}
 
-	if prepared.IsAutoPortEnabled() {
-		start := prepared.AutoPortStart()
-		if start <= 0 {
-			start = prepared.Port()
-		}
-
-		port, err := findFirefoxFreePort(start)
-		if err != nil {
-			return nil, err
-		}
-		prepared.SetResolvedPort(port)
-	}
-
 	return prepared, nil
 }
 
@@ -553,45 +625,44 @@ func (f *Firefox) connectOrLaunch() error {
 		)
 	}
 
-	if err := f.ensureLaunchPortAvailable(); err != nil {
-		return err
-	}
-	if err := f.launchBrowser(); err != nil {
-		return err
-	}
-
-	host, port, splitErr := splitProbeAddress(f.Address())
-	if splitErr != nil {
-		return support.NewBrowserConnectError("Firefox 地址无效", splitErr)
-	}
-
-	connectTimeout := f.browserConnectTimeout()
-	if !waitForFirefoxReady(host, port, connectTimeout) {
-		err = support.NewBrowserConnectError(
-			fmt.Sprintf("等待 Firefox 远端调试端口 %s 就绪超时", f.Address()),
-			nil,
-		)
-	}
-
 	var lastErr error
 	for attempt := 0; attempt <= f.options.RetryTimes(); attempt++ {
-		connected, tryErr := f.tryConnect()
-		if connected {
-			return nil
-		}
-		if tryErr != nil {
-			lastErr = tryErr
+		if attempt > 0 {
+			time.Sleep(f.retryInterval())
+			if err := f.prepareNextLaunchAttempt(); err != nil {
+				return err
+			}
 		}
 
-		if attempt == f.options.RetryTimes() {
+		if err := f.ensureLaunchPortAvailable(); err != nil {
+			lastErr = err
+			if !f.shouldRetryLaunch(attempt) {
+				return err
+			}
+			continue
+		}
+		if err := f.launchBrowser(); err != nil {
+			lastErr = err
+			if !f.shouldRetryLaunch(attempt) {
+				return err
+			}
+			f.cleanupLaunchAttempt()
+			continue
+		}
+
+		if err := f.connectAfterLaunch(); err == nil {
+			f.activateAutoPortLease()
+			return nil
+		} else {
+			lastErr = err
+		}
+
+		if !f.shouldRetryLaunch(attempt) {
 			break
 		}
-		time.Sleep(f.retryInterval())
+		f.cleanupLaunchAttempt()
 	}
 
-	if lastErr == nil {
-		lastErr = err
-	}
 	return support.NewBrowserConnectError(
 		fmt.Sprintf("启动后无法连接到 %s，请检查 Firefox 是否正常启动", f.Address()),
 		lastErr,
@@ -678,6 +749,7 @@ func (f *Firefox) tryConnect() (bool, error) {
 		f.contexts[context.Context] = context
 	}
 	f.mu.Unlock()
+	f.activateAutoPortLease()
 	return true, nil
 }
 
@@ -984,10 +1056,11 @@ func (f *Firefox) handleManagedProcessExit(process *exec.Cmd) {
 		_ = f.options.CleanupManagedFPFile()
 	}
 	f.removeFromRegistry()
+	f.releaseAutoPortLease()
 }
 
 func (f *Firefox) ensureLaunchPortAvailable() error {
-	if f.options.IsAutoPortEnabled() {
+	if f.autoPortLease != "" {
 		return nil
 	}
 
@@ -1035,6 +1108,9 @@ func (f *Firefox) rebindAddress(newAddress string) error {
 
 	f.mu.Lock()
 	f.address = newAddress
+	if f.autoPortLease == oldAddress {
+		f.autoPortLease = newAddress
+	}
 	f.mu.Unlock()
 	return nil
 }
@@ -1051,6 +1127,143 @@ func (f *Firefox) removeFromRegistry() {
 
 func (f *Firefox) cleanupAfterFailedInitialization() {
 	_ = f.Quit(time.Second, true)
+}
+
+func (f *Firefox) connectAfterLaunch() error {
+	host, port, splitErr := splitProbeAddress(f.Address())
+	if splitErr != nil {
+		return support.NewBrowserConnectError("Firefox 地址无效", splitErr)
+	}
+
+	var readyErr error
+	if !waitForFirefoxReady(host, port, f.browserConnectTimeout()) {
+		readyErr = support.NewBrowserConnectError(
+			fmt.Sprintf("等待 Firefox 远端调试端口 %s 就绪超时", f.Address()),
+			nil,
+		)
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= f.options.RetryTimes(); attempt++ {
+		connected, tryErr := f.tryConnect()
+		if connected {
+			return nil
+		}
+		if tryErr != nil {
+			lastErr = tryErr
+		}
+
+		if attempt == f.options.RetryTimes() {
+			break
+		}
+		time.Sleep(f.retryInterval())
+	}
+
+	if lastErr == nil {
+		lastErr = readyErr
+	}
+	if lastErr == nil {
+		lastErr = support.NewBrowserConnectError(
+			fmt.Sprintf("等待 Firefox 远端调试端口 %s 就绪超时", f.Address()),
+			nil,
+		)
+	}
+	return lastErr
+}
+
+func (f *Firefox) cleanupLaunchAttempt() {
+	f.mu.Lock()
+	driver := f.driver
+	process := f.process
+	processDone := f.processDone
+	processExitBinding := f.processExitBinding
+	f.driver = nil
+	f.process = nil
+	f.processDone = nil
+	f.processExitBinding = nil
+	f.sessionID = ""
+	f.ownsSession = false
+	f.contextIDs = []string{}
+	f.contexts = make(map[string]ProbeContextInfo)
+	f.clientWindows = []map[string]any{}
+	f.mu.Unlock()
+
+	if driver != nil {
+		_ = driver.Stop()
+	}
+	if err := waitManagedProcessExit(process, processDone, time.Second, true); err == nil && processExitBinding != nil && managedProcessExited(process) {
+		_ = processExitBinding()
+	}
+}
+
+func (f *Firefox) prepareNextLaunchAttempt() error {
+	if !f.options.IsAutoPortEnabled() || f.options.HasExplicitAddress() {
+		return nil
+	}
+
+	nextStart := resolveFirefoxAutoPortStart(f.options)
+	if _, currentPort, err := splitProbeAddress(f.Address()); err == nil && currentPort >= nextStart {
+		nextStart = currentPort + 1
+	}
+	f.releaseAutoPortLease()
+
+	address, port, err := firefoxAutoPortCoordinator.reserve(f.options.Host(), nextStart)
+	if err != nil {
+		return err
+	}
+	if err := f.rebindAddress(address); err != nil {
+		firefoxAutoPortCoordinator.release(address)
+		return err
+	}
+	f.options.SetResolvedPort(port)
+
+	f.mu.Lock()
+	f.autoPortLease = address
+	f.mu.Unlock()
+	return nil
+}
+
+func (f *Firefox) shouldRetryLaunch(attempt int) bool {
+	return f.options.IsAutoPortEnabled() &&
+		!f.options.HasExplicitAddress() &&
+		attempt < f.options.RetryTimes()
+}
+
+func (f *Firefox) activateAutoPortLease() {
+	f.mu.RLock()
+	address := f.autoPortLease
+	f.mu.RUnlock()
+	firefoxAutoPortCoordinator.activate(address)
+}
+
+func (f *Firefox) releaseAutoPortLease() {
+	f.mu.Lock()
+	address := f.autoPortLease
+	f.autoPortLease = ""
+	f.mu.Unlock()
+	firefoxAutoPortCoordinator.release(address)
+}
+
+func requiresAutoPortReservation(options *config.FirefoxOptions) bool {
+	return options != nil &&
+		options.IsAutoPortEnabled() &&
+		!options.IsExistingOnly() &&
+		!options.HasExplicitAddress()
+}
+
+func resolveFirefoxAutoPortStart(options *config.FirefoxOptions) int {
+	if options == nil {
+		return support.DefaultPort
+	}
+
+	start := options.AutoPortStart()
+	if start <= 0 {
+		start = options.Port()
+	}
+	if start <= 0 {
+		start = support.DefaultPort
+	}
+	return start
 }
 
 func (f *Firefox) baseTimeout() time.Duration {

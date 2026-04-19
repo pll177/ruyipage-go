@@ -68,6 +68,7 @@ type FirefoxOptions struct {
 	browserPath         string
 	host                string
 	port                int
+	addressExplicit     bool
 	profilePath         string
 	arguments           []string
 	preferences         map[string]any
@@ -149,6 +150,12 @@ func (o *FirefoxOptions) Host() string {
 func (o *FirefoxOptions) Port() int {
 	o.ensureDefaults()
 	return o.port
+}
+
+// HasExplicitAddress 返回是否显式设置过调试地址。
+func (o *FirefoxOptions) HasExplicitAddress() bool {
+	o.ensureDefaults()
+	return o.addressExplicit
 }
 
 // ProfilePath 返回 profile 路径。
@@ -293,6 +300,7 @@ func (o *FirefoxOptions) WithAddress(address string) *FirefoxOptions {
 	if o.rejectAutoFPMutation("WithAddress") {
 		return o
 	}
+	o.addressExplicit = true
 
 	if idx := strings.LastIndex(address, ":"); idx >= 0 {
 		o.host = address[:idx]
