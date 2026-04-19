@@ -169,6 +169,18 @@ func TestFirefoxOptionsWithAutoFPFileRejectsInvalidIP234Payload(t *testing.T) {
 			},
 			wantErrPart: "未支持的 country_code",
 		},
+		{
+			name: "unloadable timezone",
+			response: autoFPIPInfoResponse{
+				IP:          "1.2.3.4",
+				City:        "new york",
+				Country:     "United States",
+				CountryCode: "US",
+				Timezone:    "America/Definitely_Invalid",
+				Region:      "New York",
+			},
+			wantErrPart: "无法加载 ip234 返回的 timezone",
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -200,6 +212,24 @@ func TestFirefoxOptionsWithAutoFPFileAllowsMissingProxy(t *testing.T) {
 	opts := NewFirefoxOptions()
 	if _, err := opts.WithAutoFPFile(); err != nil {
 		t.Fatalf("WithAutoFPFile returned error without proxy: %v", err)
+	}
+}
+
+func TestFirefoxOptionsWithAutoFPFileAcceptsUSIanaTimezone(t *testing.T) {
+	installAutoFPIPStub(t, func(proxy string) (autoFPIPInfoResponse, error) {
+		return autoFPIPInfoResponse{
+			IP:          "1.2.3.4",
+			City:        "new york",
+			Country:     "United States",
+			CountryCode: "US",
+			Timezone:    "America/New_York",
+			Region:      "New York",
+		}, nil
+	})
+
+	opts := NewFirefoxOptions()
+	if _, err := opts.WithAutoFPFile(); err != nil {
+		t.Fatalf("WithAutoFPFile returned error for valid IANA timezone: %v", err)
 	}
 }
 

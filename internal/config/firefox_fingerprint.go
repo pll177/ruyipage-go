@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	_ "time/tzdata"
 )
 
 const (
@@ -474,7 +475,7 @@ func normalizeAutoFPIPInfo(ipInfo autoFPIPInfoResponse) (autoFPIPInfoResponse, n
 		return autoFPIPInfoResponse{}, nil, autoFPVoiceProfile{}, fmt.Errorf("ip234 响应缺少 timezone 字段")
 	}
 	if _, err := time.LoadLocation(normalized.Timezone); err != nil {
-		return autoFPIPInfoResponse{}, nil, autoFPVoiceProfile{}, fmt.Errorf("ip234 返回了无效 timezone: %q", ipInfo.Timezone)
+		return autoFPIPInfoResponse{}, nil, autoFPVoiceProfile{}, fmt.Errorf("无法加载 ip234 返回的 timezone: %q", ipInfo.Timezone)
 	}
 	if normalized.Region == "" {
 		return autoFPIPInfoResponse{}, nil, autoFPVoiceProfile{}, fmt.Errorf("ip234 响应缺少 region 字段")
