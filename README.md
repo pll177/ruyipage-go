@@ -51,10 +51,19 @@
 
 ## 更新到最新版本
 
-如果你项目里已经安装过旧版本，直接在你的项目目录执行：
+当前推荐安装版本：`v1.0.1`
+
+如果你是新项目，请直接显式安装当前版本：
 
 ```bash
-go get -u github.com/pll177/ruyipage-go
+go get github.com/pll177/ruyipage-go@v1.0.1
+go mod tidy
+```
+
+如果你项目里已经安装过旧版本，请在你的项目目录执行：
+
+```bash
+go get github.com/pll177/ruyipage-go@v1.0.1
 go mod tidy
 ```
 
@@ -62,16 +71,17 @@ go mod tidy
 
 ```bash
 go clean -modcache
-go get -u github.com/pll177/ruyipage-go
+go get github.com/pll177/ruyipage-go@v1.0.1
 go mod tidy
 ```
 
 说明：
 
-- 现在开始使用标准 Go module 版本标签，后续正常用 `go get -u github.com/pll177/ruyipage-go` 即可
-- 不需要再手动写 commit hash
-- 不需要再临时写 `@main`
-- 如果你之前拉到的是旧的伪版本，执行上面两组命令之一即可切到新版本
+- 目前不建议依赖 `@latest`，因为 Go proxy 刷新 tag 可能有延迟
+- 新安装、老项目升级，都建议显式写 `@当前版本`
+- 后续每次发布都会递增小版本号，例如 `v1.0.2`、`v1.0.3`
+- 你只需要把 README 里的版本号替换成最新发布版本即可
+- 不需要再手动写 commit hash，也不需要再临时写 `@main`
 
 ---
 
@@ -156,7 +166,8 @@ opts.WithProxy("http://proxy.example.com:7878")
 ### 安装
 
 ```bash
-go get github.com/pll177/ruyipage-go@latest
+go get github.com/pll177/ruyipage-go@v1.0.1
+go mod tidy
 ```
 
 导入方式：
@@ -168,7 +179,7 @@ import ruyipage "github.com/pll177/ruyipage-go"
 老项目更新：
 
 ```bash
-go get -u github.com/pll177/ruyipage-go@latest
+go get github.com/pll177/ruyipage-go@v1.0.1
 go mod tidy
 ```
 
