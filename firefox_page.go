@@ -34,11 +34,14 @@ func NewFirefoxPage(addrOrOpts any) (*FirefoxPage, error) {
 		return nil, err
 	}
 
-	firefoxPageRegistryMu.Lock()
-	defer firefoxPageRegistryMu.Unlock()
-
-	if existing := firefoxPageRegistry[addressKey]; existing != nil {
-		return existing, nil
+	canReuseBeforeLaunch := canReuseFirefoxPageByInput(raw)
+	if canReuseBeforeLaunch {
+		firefoxPageRegistryMu.Lock()
+		existing := firefoxPageRegistry[addressKey]
+		firefoxPageRegistryMu.Unlock()
+		if existing != nil {
+			return existing, nil
+		}
 	}
 
 	inner, err := internalpages.NewFirefoxPage(raw)
@@ -46,8 +49,19 @@ func NewFirefoxPage(addrOrOpts any) (*FirefoxPage, error) {
 		return nil, err
 	}
 
-	page := newFirefoxPageFromInner(inner, addressKey)
-	firefoxPageRegistry[addressKey] = page
+	actualAddressKey := addressKey
+	if browser := inner.Browser(); browser != nil && browser.Address() != "" {
+		actualAddressKey = browser.Address()
+	}
+
+	firefoxPageRegistryMu.Lock()
+	defer firefoxPageRegistryMu.Unlock()
+	if existing := firefoxPageRegistry[actualAddressKey]; existing != nil {
+		return existing, nil
+	}
+
+	page := newFirefoxPageFromInner(inner, actualAddressKey)
+	firefoxPageRegistry[actualAddressKey] = page
 	return page, nil
 }
 
@@ -288,4 +302,11 @@ func resolveFirefoxPageInput(addrOrOpts any) (*config.FirefoxOptions, string, er
 		return nil, "", err
 	}
 	return raw, raw.Address(), nil
+}
+
+func canReuseFirefoxPageByInput(raw *config.FirefoxOptions) bool {
+	if raw == nil {
+		return true
+	}
+	return !raw.IsAutoPortEnabled() || raw.HasExplicitAddress() || raw.IsExistingOnly()
 }
