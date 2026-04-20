@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -124,15 +125,14 @@ func TestFirefoxOptionsWithAutoFPFileRejectsInvalidIP234Payload(t *testing.T) {
 		wantErrPart string
 	}{
 		{
-			name: "missing country",
+			name: "missing region",
 			response: autoFPIPInfoResponse{
 				IP:          "1.2.3.4",
 				City:        "new york",
 				CountryCode: "US",
 				Timezone:    "America/New_York",
-				Region:      "New York",
 			},
-			wantErrPart: "country 字段",
+			wantErrPart: "region 字段",
 		},
 		{
 			name: "missing timezone",
@@ -179,7 +179,7 @@ func TestFirefoxOptionsWithAutoFPFileRejectsInvalidIP234Payload(t *testing.T) {
 				Timezone:    "America/Definitely_Invalid",
 				Region:      "New York",
 			},
-			wantErrPart: "无法加载 ip234 返回的 timezone",
+			wantErrPart: "自动指纹无法加载 timezone",
 		},
 	}
 
@@ -230,6 +230,156 @@ func TestFirefoxOptionsWithAutoFPFileAcceptsUSIanaTimezone(t *testing.T) {
 	opts := NewFirefoxOptions()
 	if _, err := opts.WithAutoFPFile(); err != nil {
 		t.Fatalf("WithAutoFPFile returned error for valid IANA timezone: %v", err)
+	}
+}
+
+func TestFirefoxOptionsWithAutoFPFileFallsBackForUnprofiledButValidCountryCode(t *testing.T) {
+	installAutoFPIPStub(t, func(proxy string) (autoFPIPInfoResponse, error) {
+		return autoFPIPInfoResponse{
+			IP:          "151.242.10.229",
+			City:        "Warsaw",
+			Country:     "Poland",
+			CountryCode: "PL",
+			Timezone:    "Europe/Warsaw",
+			Region:      "Mazovia",
+		}, nil
+	})
+
+	opts := NewFirefoxOptions()
+	if _, err := opts.WithAutoFPFile(); err != nil {
+		t.Fatalf("WithAutoFPFile returned error for fallback country profile: %v", err)
+	}
+
+	fpfilePath := opts.FPFile()
+	t.Cleanup(func() {
+		_ = os.Remove(fpfilePath)
+	})
+
+	fields := readFingerprintFields(t, fpfilePath)
+	assertFingerprintField(t, fields, "timezone", "Europe/Warsaw")
+	assertFingerprintField(t, fields, "language", "de-DE,de")
+	assertFingerprintField(t, fields, "speech.voices.default.name", "Microsoft Hedda Desktop - German")
+}
+
+func TestFetchAutoFPFingerprintProfileFallsBackAndMergesFields(t *testing.T) {
+	installAutoFPProvidersStub(t,
+		autoFPIPProvider{
+			name: "first",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				return autoFPIPInfoResponse{
+					IP:          "151.242.10.229",
+					City:        "Hong Kong",
+					CountryCode: "HK",
+					Timezone:    "Asia/Hong_Kong",
+				}, nil
+			},
+		},
+		autoFPIPProvider{
+			name: "second",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				return autoFPIPInfoResponse{
+					Country: "Hong Kong",
+					Region:  "Kowloon",
+				}, nil
+			},
+		},
+	)
+
+	got, err := fetchAutoFPFingerprintProfile("")
+	if err != nil {
+		t.Fatalf("fetchAutoFPFingerprintProfile returned error: %v", err)
+	}
+	if got.IP != "151.242.10.229" || got.CountryCode != "HK" || got.Country != "Hong Kong" || got.Region != "Kowloon" || got.Timezone != "Asia/Hong_Kong" {
+		t.Fatalf("unexpected merged response: %+v", got)
+	}
+}
+
+func TestFetchAutoFPFingerprintProfileUsesCountryNameFallbackFromCode(t *testing.T) {
+	installAutoFPProvidersStub(t,
+		autoFPIPProvider{
+			name: "ipinfo",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				return autoFPIPInfoResponse{
+					IP:          "151.242.10.229",
+					City:        "Hong Kong",
+					CountryCode: "HK",
+					Region:      "Hong Kong",
+					Timezone:    "Asia/Hong_Kong",
+				}, nil
+			},
+		},
+	)
+
+	got, err := fetchAutoFPFingerprintProfile("")
+	if err != nil {
+		t.Fatalf("fetchAutoFPFingerprintProfile returned error: %v", err)
+	}
+	if got.Country != "Hong Kong" {
+		t.Fatalf("country = %q, want Hong Kong", got.Country)
+	}
+}
+
+func TestAutoFPCountryNameFromCodeSupportsGlobalMappings(t *testing.T) {
+	testCases := map[string]string{
+		"PL": "Poland",
+		"ZA": "South Africa",
+		"AE": "United Arab Emirates",
+		"HK": "Hong Kong",
+	}
+
+	for countryCode, want := range testCases {
+		if got := autoFPCountryNameFromCode(countryCode); got != want {
+			t.Fatalf("autoFPCountryNameFromCode(%q) = %q, want %q", countryCode, got, want)
+		}
+	}
+}
+
+func TestFetchAutoFPFingerprintProfileReturnsCombinedErrorWhenAllFail(t *testing.T) {
+	installAutoFPProvidersStub(t,
+		autoFPIPProvider{
+			name: "first",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				return autoFPIPInfoResponse{}, fmt.Errorf("timeout")
+			},
+		},
+		autoFPIPProvider{
+			name: "second",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				return autoFPIPInfoResponse{}, fmt.Errorf("403 forbidden")
+			},
+		},
+	)
+
+	_, err := fetchAutoFPFingerprintProfile("")
+	if err == nil {
+		t.Fatalf("expected fetchAutoFPFingerprintProfile to fail")
+	}
+	if !strings.Contains(err.Error(), "first: timeout") || !strings.Contains(err.Error(), "second: 403 forbidden") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestFetchAutoFPFingerprintProfileFailsWhenFieldsRemainMissing(t *testing.T) {
+	installAutoFPProvidersStub(t,
+		autoFPIPProvider{
+			name: "only",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				return autoFPIPInfoResponse{
+					IP:          "151.242.10.229",
+					City:        "Hong Kong",
+					CountryCode: "HK",
+					Timezone:    "Asia/Hong_Kong",
+				}, nil
+			},
+		},
+	)
+
+	_, err := fetchAutoFPFingerprintProfile("")
+	if err == nil {
+		t.Fatalf("expected fetchAutoFPFingerprintProfile to fail")
+	}
+	if !strings.Contains(err.Error(), "缺少 country 字段") && !strings.Contains(err.Error(), "缺少 region 字段") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -324,6 +474,15 @@ func installAutoFPIPStub(t *testing.T, stub func(proxy string) (autoFPIPInfoResp
 	fetchAutoFPIPInfo = stub
 	t.Cleanup(func() {
 		fetchAutoFPIPInfo = oldFetch
+	})
+}
+
+func installAutoFPProvidersStub(t *testing.T, providers ...autoFPIPProvider) {
+	t.Helper()
+	oldProviders := autoFPIPProviders
+	autoFPIPProviders = providers
+	t.Cleanup(func() {
+		autoFPIPProviders = oldProviders
 	})
 }
 

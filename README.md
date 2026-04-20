@@ -22,6 +22,24 @@
 
 ---
 
+## v1 最新修复：`WithAutoFPFile()` 全球国家/地区识别与自动降级
+
+已修复 `WithAutoFPFile()` 在自动指纹场景下，遇到一些合法国家/地区 IP 信息时仍报“不支持的国家”或国家字段不完整的问题。
+
+这次更新包含两部分：
+
+- 自动指纹 IP 信息改为多源聚合，请求成功就先用，缺失字段继续向后补齐
+- `country_code -> country` 不再只靠少量手写映射，已补成更完整的全球国家/地区映射
+- 对没有专属语音/语言模板的国家，不再直接失败，而是自动降级到可用的近似语言模板
+
+当前效果：
+
+- 像 `HK / PL / ZA / AE` 这类国家/地区代码都能正确补全国家名
+- `WithAutoFPFile()` 遇到“合法国家码但没有独立 profile”的情况，会优先自动降级而不是直接报错
+- 如果多个 IP 源都失败，或者最终关键字段仍不完整，才会返回错误
+
+---
+
 ## v1 最新修复：多 Tab `Listen()/Intercept()` 互相 Stop
 
 已修复同一浏览器下多个 tab 同时使用 `Listen()` / `Intercept()` 时，一个 tab `Stop()` 或关闭后把其他 tab 的网络监听/拦截一起停掉的问题。
@@ -72,12 +90,12 @@
 
 ## 更新到最新版本
 
-当前推荐版本：`v1.0.6`
+当前推荐版本：`v1.1.9`
 
 新安装、老项目升级都统一执行这一组命令：
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.0.6
+go get github.com/pll177/ruyipage-go@v1.1.9
 go mod tidy
 ```
 
@@ -85,7 +103,7 @@ go mod tidy
 
 - 不再推荐依赖 `@latest`
 - 新安装和升级都直接显式写 `@当前版本`
-- 后续每次发布都会递增小版本号，例如 `v1.0.7`、`v1.0.8`
+- 后续每次发布都会递增小版本号，例如 `v1.1.10`、`v1.1.11`
 - 看到 README 里的版本号变了，直接把命令里的版本号同步替换即可
 
 ---
@@ -171,7 +189,7 @@ opts.WithProxy("http://proxy.example.com:7878")
 ### 安装
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.0.6
+go get github.com/pll177/ruyipage-go@v1.1.9
 go mod tidy
 ```
 
@@ -179,13 +197,6 @@ go mod tidy
 
 ```go
 import ruyipage "github.com/pll177/ruyipage-go"
-```
-
-老项目更新：
-
-```bash
-go get github.com/pll177/ruyipage-go@v1.0.6
-go mod tidy
 ```
 
 安装后可确认模块版本：
