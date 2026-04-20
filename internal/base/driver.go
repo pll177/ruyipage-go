@@ -453,7 +453,23 @@ func extractEventContext(params map[string]any) string {
 	}
 
 	context, _ := params["context"].(string)
-	return context
+	if context != "" {
+		return context
+	}
+
+	if request, ok := params["request"].(map[string]any); ok {
+		if value, _ := request["context"].(string); value != "" {
+			return value
+		}
+	}
+
+	if source, ok := params["source"].(map[string]any); ok {
+		if value, _ := source["context"].(string); value != "" {
+			return value
+		}
+	}
+
+	return ""
 }
 
 func isInvalidSessionError(err error) bool {

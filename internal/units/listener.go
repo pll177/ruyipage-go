@@ -99,12 +99,12 @@ func (l *Listener) Start(targets any, isRegex bool, method string) error {
 	}
 
 	callbackDriver := l.owner.Driver()
-	if err := callbackDriver.SetGlobalCallback(listenerResponseCompleted, l.onResponseCompleted, false); err != nil {
+	if err := callbackDriver.SetCallback(listenerResponseCompleted, l.onResponseCompleted, false); err != nil {
 		_ = bidi.Unsubscribe(driver, nil, nil, []string{result.Subscription}, l.resolveTimeout())
 		return err
 	}
-	if err := callbackDriver.SetGlobalCallback(listenerFetchError, l.onFetchError, false); err != nil {
-		callbackDriver.RemoveGlobalCallback(listenerResponseCompleted, false)
+	if err := callbackDriver.SetCallback(listenerFetchError, l.onFetchError, false); err != nil {
+		callbackDriver.RemoveCallback(listenerResponseCompleted, false)
 		_ = bidi.Unsubscribe(driver, nil, nil, []string{result.Subscription}, l.resolveTimeout())
 		return err
 	}
@@ -139,8 +139,8 @@ func (l *Listener) Stop() {
 		return
 	}
 
-	l.owner.Driver().RemoveGlobalCallback(listenerResponseCompleted, false)
-	l.owner.Driver().RemoveGlobalCallback(listenerFetchError, false)
+	l.owner.Driver().RemoveCallback(listenerResponseCompleted, false)
+	l.owner.Driver().RemoveCallback(listenerFetchError, false)
 	if subscriptionID != "" {
 		_ = bidi.Unsubscribe(l.owner.BrowserDriver(), nil, nil, []string{subscriptionID}, l.resolveTimeout())
 	}
