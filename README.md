@@ -22,6 +22,34 @@
 
 ---
 
+## v1 最新修复：`WithAutoFPFile()` IP 信息改为并发请求
+
+已优化 `WithAutoFPFile()` 自动指纹 IP 信息获取速度。
+
+之前多源 IP 接口是串行请求：前一个慢、后一个就得继续等，整体等待时间偏长。  
+现在改为：
+
+- 所有 IP provider **同时并发请求**
+- 请求成功的结果会保留下来
+- 请求失败的 provider 直接记失败，不阻塞整体流程
+- 等并发结果收齐后，再按固定 provider 优先级顺序合并字段
+
+当前行为：
+
+- 速度比原来的串行请求更快
+- 结果仍然稳定，不会因为“哪个接口先返回”而改变最终字段来源
+- 某个接口失败时，其他成功接口仍可继续补全 `ip / city / country / country_code / timezone / region`
+- 全部失败，或最终关键字段仍缺失时，才返回错误
+
+### 本次修改汇总
+
+- `WithAutoFPFile()` 的自动指纹 IP 信息获取改为并发 provider 拉取
+- 仍保留原有的按优先级顺序合并逻辑
+- 仍保留国家名补全、timezone 校验、voice profile 自动降级
+- 新增并发乱序返回场景测试，确保最终结果不受返回时序影响
+
+---
+
 ## v1 最新修复：`WithAutoFPFile()` 全球国家/地区识别与自动降级
 
 已修复 `WithAutoFPFile()` 在自动指纹场景下，遇到一些合法国家/地区 IP 信息时仍报“不支持的国家”或国家字段不完整的问题。
@@ -90,12 +118,12 @@
 
 ## 更新到最新版本
 
-当前推荐版本：`v1.1.9`
+当前推荐版本：`v1.1.10`
 
 新安装、老项目升级都统一执行这一组命令：
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.9
+go get github.com/pll177/ruyipage-go@v1.1.10
 go mod tidy
 ```
 
@@ -103,7 +131,7 @@ go mod tidy
 
 - 不再推荐依赖 `@latest`
 - 新安装和升级都直接显式写 `@当前版本`
-- 后续每次发布都会递增小版本号，例如 `v1.1.10`、`v1.1.11`
+- 后续每次发布都会递增小版本号，例如 `v1.1.11`、`v1.1.12`
 - 看到 README 里的版本号变了，直接把命令里的版本号同步替换即可
 
 ---
@@ -189,7 +217,7 @@ opts.WithProxy("http://proxy.example.com:7878")
 ### 安装
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.9
+go get github.com/pll177/ruyipage-go@v1.1.10
 go mod tidy
 ```
 
