@@ -22,6 +22,27 @@
 
 ---
 
+## v1 最新修复：多 Tab `Listen()/Intercept()` 互相 Stop
+
+已修复同一浏览器下多个 tab 同时使用 `Listen()` / `Intercept()` 时，一个 tab `Stop()` 或关闭后把其他 tab 的网络监听/拦截一起停掉的问题。
+
+根因是 Go 版之前把这两类网络事件能力注册成了**浏览器级全局回调**：
+
+- 后启动的 tab 会覆盖先启动的回调
+- 任意一个 tab `Stop()` 时，又会把这个全局回调直接移除
+
+现在已改为按 **tab/context 级回调** 绑定：
+
+- 每个 tab 的 `Listen()` 独立工作
+- 每个 tab 的 `Intercept()` 独立工作
+- 关闭一个 tab 或调用一个 tab 的 `Stop()`，不会再影响其他 tab
+
+并新增了真实浏览器复现/验证示例：
+
+- `examples/46_multi_tab_listener_isolation`
+
+---
+
 ## v1 最新修复：`AutoPortEnabled(true)` 并发启动端口冲突
 
 已修复同一 Go 进程内并发启动多个 Firefox 实例时，`AutoPortEnabled(true)` 看起来已经开启，但最终仍可能只启动出一个浏览器的问题。
@@ -51,12 +72,12 @@
 
 ## 更新到最新版本
 
-当前推荐版本：`v1.0.3`
+当前推荐版本：`v1.0.6`
 
 新安装、老项目升级都统一执行这一组命令：
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.0.3
+go get github.com/pll177/ruyipage-go@v1.0.6
 go mod tidy
 ```
 
@@ -64,7 +85,7 @@ go mod tidy
 
 - 不再推荐依赖 `@latest`
 - 新安装和升级都直接显式写 `@当前版本`
-- 后续每次发布都会递增小版本号，例如 `v1.0.4`、`v1.0.5`
+- 后续每次发布都会递增小版本号，例如 `v1.0.7`、`v1.0.8`
 - 看到 README 里的版本号变了，直接把命令里的版本号同步替换即可
 
 ---
@@ -150,7 +171,7 @@ opts.WithProxy("http://proxy.example.com:7878")
 ### 安装
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.0.3
+go get github.com/pll177/ruyipage-go@v1.0.6
 go mod tidy
 ```
 
@@ -163,7 +184,7 @@ import ruyipage "github.com/pll177/ruyipage-go"
 老项目更新：
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.0.3
+go get github.com/pll177/ruyipage-go@v1.0.6
 go mod tidy
 ```
 
@@ -539,7 +560,7 @@ go run ./examples/39_attach_exist_browser
 | 标签页 / frame | `NewTab()` / `GetTab()` / `GetFrame()` | `09_tabs`、`13_iframe` |
 | Shadow DOM | `ShadowRoot()` / `ClosedShadowRoot()` | `14_shadow_dom` |
 | 提示框 | `WaitPrompt()` / `HandlePrompt()` | `17_user_prompts` |
-| 网络监听 / 拦截 | `Listen()` / `Intercept()` / `Network()` | `11_network_intercept`、`18_advanced_network`、`28_network_data_collector` |
+| 网络监听 / 拦截 | `Listen()` / `Intercept()` / `Network()` | `11_network_intercept`、`18_advanced_network`、`28_network_data_collector`、`46_multi_tab_listener_isolation` |
 | 下载 | `Downloads()` | `23_download` |
 | 导航 / 通用事件 | `Navigation()` / `Events()` | `24_navigation_events`、`30_browsing_context_events`、`31_network_events` |
 | 浏览上下文 | `Contexts()` | `25_browser_user_context`、`26_browsing_context_advanced` |
