@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFirefoxOptionsWithAutoFPFileWritesExpectedFingerprint(t *testing.T) {
@@ -291,6 +292,45 @@ func TestFetchAutoFPFingerprintProfileFallsBackAndMergesFields(t *testing.T) {
 	}
 	if got.IP != "151.242.10.229" || got.CountryCode != "HK" || got.Country != "Hong Kong" || got.Region != "Kowloon" || got.Timezone != "Asia/Hong_Kong" {
 		t.Fatalf("unexpected merged response: %+v", got)
+	}
+}
+
+func TestFetchAutoFPFingerprintProfileMergesByProviderOrderInsteadOfReturnOrder(t *testing.T) {
+	installAutoFPProvidersStub(t,
+		autoFPIPProvider{
+			name: "first",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				time.Sleep(40 * time.Millisecond)
+				return autoFPIPInfoResponse{
+					IP:          "151.242.10.229",
+					City:        "Hong Kong",
+					Country:     "Hong Kong",
+					CountryCode: "HK",
+					Timezone:    "Asia/Hong_Kong",
+				}, nil
+			},
+		},
+		autoFPIPProvider{
+			name: "second",
+			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+				time.Sleep(5 * time.Millisecond)
+				return autoFPIPInfoResponse{
+					Country: "Wrong Country",
+					Region:  "Kowloon",
+				}, nil
+			},
+		},
+	)
+
+	got, err := fetchAutoFPFingerprintProfile("")
+	if err != nil {
+		t.Fatalf("fetchAutoFPFingerprintProfile returned error: %v", err)
+	}
+	if got.Country != "Hong Kong" {
+		t.Fatalf("country = %q, want Hong Kong", got.Country)
+	}
+	if got.Region != "Kowloon" {
+		t.Fatalf("region = %q, want Kowloon", got.Region)
 	}
 }
 

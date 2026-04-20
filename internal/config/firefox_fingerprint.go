@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 	_ "time/tzdata"
 )
@@ -51,6 +52,13 @@ var (
 type autoFPIPProvider struct {
 	name  string
 	fetch func(*http.Client) (autoFPIPInfoResponse, error)
+}
+
+type autoFPIPProviderResult struct {
+	index    int
+	name     string
+	response autoFPIPInfoResponse
+	err      error
 }
 
 type autoFPIPInfoResponse struct {
@@ -475,15 +483,37 @@ func fetchAutoFPFingerprintProfile(proxy string) (autoFPIPInfoResponse, error) {
 		Transport: transport,
 	}
 
+	resultsCh := make(chan autoFPIPProviderResult, len(autoFPIPProviders))
+	var wg sync.WaitGroup
+	for index, provider := range autoFPIPProviders {
+		wg.Add(1)
+		go func(index int, provider autoFPIPProvider) {
+			defer wg.Done()
+			response, fetchErr := provider.fetch(client)
+			resultsCh <- autoFPIPProviderResult{
+				index:    index,
+				name:     provider.name,
+				response: response,
+				err:      fetchErr,
+			}
+		}(index, provider)
+	}
+	wg.Wait()
+	close(resultsCh)
+
+	results := make([]autoFPIPProviderResult, len(autoFPIPProviders))
+	for result := range resultsCh {
+		results[result.index] = result
+	}
+
 	var merged autoFPIPInfoResponse
 	var errorsList []string
-	for _, provider := range autoFPIPProviders {
-		response, fetchErr := provider.fetch(client)
-		if fetchErr != nil {
-			errorsList = append(errorsList, fmt.Sprintf("%s: %v", provider.name, fetchErr))
+	for _, result := range results {
+		if result.err != nil {
+			errorsList = append(errorsList, fmt.Sprintf("%s: %v", result.name, result.err))
 			continue
 		}
-		merged = mergeAutoFPIPInfo(merged, response)
+		merged = mergeAutoFPIPInfo(merged, result.response)
 		if completeAutoFPIPInfo(merged) {
 			break
 		}
