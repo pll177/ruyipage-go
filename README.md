@@ -48,12 +48,12 @@
 
 ## 更新到最新版本
 
-当前推荐版本：`v1.1.12`
+当前推荐版本：`v1.1.13`
 
 新安装、老项目升级都统一执行这一组命令：
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.12
+go get github.com/pll177/ruyipage-go@v1.1.13
 go mod tidy
 ```
 
@@ -61,7 +61,7 @@ go mod tidy
 
 - 不再推荐依赖 `@latest`
 - 新安装和升级都直接显式写 `@当前版本`
-- 后续每次发布都会递增小版本号，例如 `v1.1.12`、`v1.1.13`
+- 后续每次发布都会递增小版本号，例如 `v1.1.13`、`v1.1.14`
 - 看到 README 里的版本号变了，直接把命令里的版本号同步替换即可
 
 ---
@@ -147,7 +147,7 @@ opts.WithProxy("http://proxy.example.com:7878")
 ### 安装
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.12
+go get github.com/pll177/ruyipage-go@v1.1.13
 go mod tidy
 ```
 
