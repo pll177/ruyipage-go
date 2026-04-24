@@ -49,12 +49,12 @@
 
 ## 更新到最新版本
 
-当前推荐版本：`v1.1.10`
+当前推荐版本：`v1.1.11`
 
 新安装、老项目升级都统一执行这一组命令：
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.10
+go get github.com/pll177/ruyipage-go@v1.1.11
 go mod tidy
 ```
 
@@ -148,7 +148,7 @@ opts.WithProxy("http://proxy.example.com:7878")
 ### 安装
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.10
+go get github.com/pll177/ruyipage-go@v1.1.11
 go mod tidy
 ```
 
