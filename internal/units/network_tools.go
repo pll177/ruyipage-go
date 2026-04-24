@@ -449,6 +449,17 @@ func intNetworkValue(value any) int {
 	}
 }
 
+func boolNetworkValue(value any) bool {
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return typed == "true"
+	default:
+		return false
+	}
+}
+
 type packetQueue[T any] struct {
 	mu    sync.Mutex
 	items chan T

@@ -269,6 +269,34 @@ func (r *InterceptedRequest) loadBody() string {
 	if body, ok := decodeNetworkBodyValue(r.Raw["body"]); ok {
 		return body
 	}
+	if r.collector != nil && r.RequestID != "" {
+		timeout := time.Duration(0)
+		if !r.Handled() {
+			// Do not keep an intercepted request paused for the full BiDi
+			// timeout just to read optional body data.
+			timeout = 500 * time.Millisecond
+		}
+		if data, err := r.collector.getWithTimeout(r.RequestID, "request", timeout); err == nil && data != nil {
+			if body, ok := decodeNetworkBodyValue(data.Bytes); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Base64); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw["body"]); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw["data"]); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw["value"]); ok {
+				return body
+			}
+			if body, ok := decodeNetworkBodyValue(data.Raw); ok {
+				return body
+			}
+		}
+	}
 	return ""
 }
 
@@ -433,22 +461,25 @@ func (i *Interceptor) Start(
 	}
 
 	if hasString(phases, "beforeRequestSent") {
-		if err := callbackDriver.SetCallback(listenerBeforeRequestSent, i.onIntercept, false); err != nil {
+		if err := callbackDriver.SetGlobalCallback(listenerBeforeRequestSent, i.onIntercept, false); err != nil {
 			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, requestCollector, responseCollector)
 			return nil, err
 		}
 	}
 	if hasString(phases, "responseStarted") {
-		if err := callbackDriver.SetCallback("network.responseStarted", i.onResponseIntercept, false); err != nil {
+		if err := callbackDriver.SetGlobalCallback("network.responseStarted", i.onResponseIntercept, false); err != nil {
 			callbackDriver.RemoveCallback(listenerBeforeRequestSent, false)
+			callbackDriver.RemoveGlobalCallback(listenerBeforeRequestSent, false)
 			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, requestCollector, responseCollector)
 			return nil, err
 		}
 	}
 	if hasString(phases, "authRequired") {
-		if err := callbackDriver.SetCallback("network.authRequired", i.onAuth, false); err != nil {
+		if err := callbackDriver.SetGlobalCallback("network.authRequired", i.onAuth, false); err != nil {
 			callbackDriver.RemoveCallback(listenerBeforeRequestSent, false)
 			callbackDriver.RemoveCallback("network.responseStarted", false)
+			callbackDriver.RemoveGlobalCallback(listenerBeforeRequestSent, false)
+			callbackDriver.RemoveGlobalCallback("network.responseStarted", false)
 			i.cleanupStart(stringifyNetworkValue(result["intercept"]), subscriptionID, requestCollector, responseCollector)
 			return nil, err
 		}
@@ -518,6 +549,9 @@ func (i *Interceptor) Stop() {
 	callbackDriver.RemoveCallback(listenerBeforeRequestSent, false)
 	callbackDriver.RemoveCallback("network.responseStarted", false)
 	callbackDriver.RemoveCallback("network.authRequired", false)
+	callbackDriver.RemoveGlobalCallback(listenerBeforeRequestSent, false)
+	callbackDriver.RemoveGlobalCallback("network.responseStarted", false)
+	callbackDriver.RemoveGlobalCallback("network.authRequired", false)
 
 	timeout := i.resolveTimeout()
 	if interceptID != "" {
@@ -626,7 +660,7 @@ func (i *Interceptor) matchesIntercept(params map[string]any) bool {
 	}
 	intercepts, _ := params["intercepts"].([]any)
 	if len(intercepts) == 0 {
-		return true
+		return boolNetworkValue(params["isBlocked"])
 	}
 	for _, value := range intercepts {
 		if stringifyNetworkValue(value) == interceptID {
@@ -651,7 +685,7 @@ func (i *Interceptor) onIntercept(params map[string]any) {
 		i.resolveTimeout(),
 	)
 	if handler := i.currentHandler(); handler != nil {
-		go handleRequestIntercept(handler, req)
+		i.handleRequestIntercept(handler, req)
 		return
 	}
 	i.queue.Push(req)
@@ -672,7 +706,7 @@ func (i *Interceptor) onResponseIntercept(params map[string]any) {
 		i.resolveTimeout(),
 	)
 	if handler := i.currentHandler(); handler != nil {
-		go i.handleResponseIntercept(handler, req)
+		i.handleResponseIntercept(handler, req)
 		return
 	}
 	i.queue.Push(req)
@@ -693,13 +727,13 @@ func (i *Interceptor) onAuth(params map[string]any) {
 		i.resolveTimeout(),
 	)
 	if handler := i.currentHandler(); handler != nil {
-		go i.handleAuthIntercept(handler, req)
+		i.handleAuthIntercept(handler, req)
 		return
 	}
 	i.queue.Push(req)
 }
 
-func handleRequestIntercept(handler func(*InterceptedRequest), req *InterceptedRequest) {
+func (i *Interceptor) handleRequestIntercept(handler func(*InterceptedRequest), req *InterceptedRequest) {
 	safeRunInterceptHandler(handler, req)
 	if !req.Handled() {
 		_ = req.ContinueRequest("", "", nil, nil)
