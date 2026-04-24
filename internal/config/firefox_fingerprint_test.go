@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -266,7 +267,7 @@ func TestFetchAutoFPFingerprintProfileFallsBackAndMergesFields(t *testing.T) {
 	installAutoFPProvidersStub(t,
 		autoFPIPProvider{
 			name: "first",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				return autoFPIPInfoResponse{
 					IP:          "151.242.10.229",
 					City:        "Hong Kong",
@@ -277,7 +278,7 @@ func TestFetchAutoFPFingerprintProfileFallsBackAndMergesFields(t *testing.T) {
 		},
 		autoFPIPProvider{
 			name: "second",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				return autoFPIPInfoResponse{
 					Country: "Hong Kong",
 					Region:  "Kowloon",
@@ -299,7 +300,7 @@ func TestFetchAutoFPFingerprintProfileMergesByProviderOrderInsteadOfReturnOrder(
 	installAutoFPProvidersStub(t,
 		autoFPIPProvider{
 			name: "first",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				time.Sleep(40 * time.Millisecond)
 				return autoFPIPInfoResponse{
 					IP:          "151.242.10.229",
@@ -312,7 +313,7 @@ func TestFetchAutoFPFingerprintProfileMergesByProviderOrderInsteadOfReturnOrder(
 		},
 		autoFPIPProvider{
 			name: "second",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				time.Sleep(5 * time.Millisecond)
 				return autoFPIPInfoResponse{
 					Country: "Wrong Country",
@@ -334,11 +335,56 @@ func TestFetchAutoFPFingerprintProfileMergesByProviderOrderInsteadOfReturnOrder(
 	}
 }
 
+func TestFetchAutoFPFingerprintProfileReturnsFastestValidProvider(t *testing.T) {
+	installAutoFPProvidersStub(t,
+		autoFPIPProvider{
+			name: "slow",
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
+				time.Sleep(200 * time.Millisecond)
+				return autoFPIPInfoResponse{
+					IP:          "151.242.10.229",
+					City:        "Hong Kong",
+					Country:     "Hong Kong",
+					CountryCode: "HK",
+					Timezone:    "Asia/Hong_Kong",
+					Region:      "Kowloon",
+				}, nil
+			},
+		},
+		autoFPIPProvider{
+			name: "fast",
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
+				time.Sleep(5 * time.Millisecond)
+				return autoFPIPInfoResponse{
+					IP:          "1.1.1.1",
+					City:        "Sydney",
+					Country:     "Australia",
+					CountryCode: "AU",
+					Timezone:    "Australia/Sydney",
+					Region:      "New South Wales",
+				}, nil
+			},
+		},
+	)
+
+	start := time.Now()
+	got, err := fetchAutoFPFingerprintProfile("")
+	if err != nil {
+		t.Fatalf("fetchAutoFPFingerprintProfile returned error: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed >= 100*time.Millisecond {
+		t.Fatalf("fetchAutoFPFingerprintProfile took %s, want fast return", elapsed)
+	}
+	if got.IP != "1.1.1.1" || got.CountryCode != "AU" {
+		t.Fatalf("unexpected fastest response: %+v", got)
+	}
+}
+
 func TestFetchAutoFPFingerprintProfileUsesCountryNameFallbackFromCode(t *testing.T) {
 	installAutoFPProvidersStub(t,
 		autoFPIPProvider{
 			name: "ipinfo",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				return autoFPIPInfoResponse{
 					IP:          "151.242.10.229",
 					City:        "Hong Kong",
@@ -378,13 +424,13 @@ func TestFetchAutoFPFingerprintProfileReturnsCombinedErrorWhenAllFail(t *testing
 	installAutoFPProvidersStub(t,
 		autoFPIPProvider{
 			name: "first",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				return autoFPIPInfoResponse{}, fmt.Errorf("timeout")
 			},
 		},
 		autoFPIPProvider{
 			name: "second",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				return autoFPIPInfoResponse{}, fmt.Errorf("403 forbidden")
 			},
 		},
@@ -403,7 +449,7 @@ func TestFetchAutoFPFingerprintProfileFailsWhenFieldsRemainMissing(t *testing.T)
 	installAutoFPProvidersStub(t,
 		autoFPIPProvider{
 			name: "only",
-			fetch: func(client *http.Client) (autoFPIPInfoResponse, error) {
+			fetch: func(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 				return autoFPIPInfoResponse{
 					IP:          "151.242.10.229",
 					City:        "Hong Kong",

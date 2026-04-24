@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	cryptorand "crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -13,29 +14,29 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 	_ "time/tzdata"
 )
 
 const (
-	autoFPIPInfoURL          = "https://ip234.in/ip.json"
-	autoFPIPAPIURL           = "http://ip-api.com/json/?fields"
-	autoFPIPAPICOURL         = "https://ipapi.co/json/"
-	autoFPIPWhoIsURL         = "https://ipwho.is/"
-	autoFPIPInfoIOURL        = "https://ipinfo.io/json"
-	autoFPFreeIPAPIURL       = "https://freeipapi.com/api/json"
-	defaultWindowsFontSystem = "windows"
-	defaultWindowsUserAgent  = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/151.0"
-	defaultWebGLVersion      = "WebGL 1.0 (OpenGL ES 2.0 Chromium)"
-	defaultWebGLGLSLVersion  = "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"
-	defaultWebGLMaxTexture   = 16384
-	defaultWebGLMaxCubeMap   = 16384
-	defaultWebGLImageUnits   = 32
-	defaultWebGLVertexAttr   = 16
-	defaultWebGLPointSize    = 1024
-	defaultWebGLViewportDim  = 16384
-	defaultCanvasSeedMax     = 1_000_000_000
+	autoFPIPInfoURL            = "https://ip234.in/ip.json"
+	autoFPIPAPIURL             = "http://ip-api.com/json/?fields"
+	autoFPIPAPICOURL           = "https://ipapi.co/json/"
+	autoFPIPWhoIsURL           = "https://ipwho.is/"
+	autoFPIPInfoIOURL          = "https://ipinfo.io/json"
+	autoFPFreeIPAPIURL         = "https://freeipapi.com/api/json"
+	defaultWindowsFontSystem   = "windows"
+	defaultWindowsUserAgent    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:147.0) Gecko/20100101 Firefox/151.0"
+	defaultWebGLVersion        = "WebGL 1.0 (OpenGL ES 2.0 Chromium)"
+	defaultWebGLGLSLVersion    = "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"
+	defaultWebGLMaxTexture     = 16384
+	defaultWebGLMaxCubeMap     = 16384
+	defaultWebGLImageUnits     = 32
+	defaultWebGLVertexAttr     = 16
+	defaultWebGLPointSize      = 1024
+	defaultWebGLViewportDim    = 16384
+	defaultCanvasSeedMax       = 1_000_000_000
+	autoFPIPInfoRequestTimeout = 4 * time.Second
 )
 
 var (
@@ -51,7 +52,7 @@ var (
 
 type autoFPIPProvider struct {
 	name  string
-	fetch func(*http.Client) (autoFPIPInfoResponse, error)
+	fetch func(context.Context, *http.Client) (autoFPIPInfoResponse, error)
 }
 
 type autoFPIPProviderResult struct {
@@ -479,17 +480,16 @@ func fetchAutoFPFingerprintProfile(proxy string) (autoFPIPInfoResponse, error) {
 	}
 
 	client := &http.Client{
-		Timeout:   10 * time.Second,
+		Timeout:   autoFPIPInfoRequestTimeout,
 		Transport: transport,
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), autoFPIPInfoRequestTimeout)
+	defer cancel()
 
 	resultsCh := make(chan autoFPIPProviderResult, len(autoFPIPProviders))
-	var wg sync.WaitGroup
 	for index, provider := range autoFPIPProviders {
-		wg.Add(1)
 		go func(index int, provider autoFPIPProvider) {
-			defer wg.Done()
-			response, fetchErr := provider.fetch(client)
+			response, fetchErr := provider.fetch(ctx, client)
 			resultsCh <- autoFPIPProviderResult{
 				index:    index,
 				name:     provider.name,
@@ -498,19 +498,37 @@ func fetchAutoFPFingerprintProfile(proxy string) (autoFPIPInfoResponse, error) {
 			}
 		}(index, provider)
 	}
-	wg.Wait()
-	close(resultsCh)
 
 	results := make([]autoFPIPProviderResult, len(autoFPIPProviders))
-	for result := range resultsCh {
-		results[result.index] = result
-	}
-
 	var merged autoFPIPInfoResponse
 	var errorsList []string
-	for _, result := range results {
+
+	for remaining := len(autoFPIPProviders); remaining > 0; remaining-- {
+		var result autoFPIPProviderResult
+		select {
+		case result = <-resultsCh:
+		case <-ctx.Done():
+			errorsList = append(errorsList, ctx.Err().Error())
+			remaining = 0
+			continue
+		}
+		results[result.index] = result
 		if result.err != nil {
 			errorsList = append(errorsList, fmt.Sprintf("%s: %v", result.name, result.err))
+			continue
+		}
+
+		normalized, _, _, err := normalizeAutoFPIPInfo(result.response)
+		if err == nil {
+			cancel()
+			return normalized, nil
+		}
+
+		errorsList = append(errorsList, fmt.Sprintf("%s: %v", result.name, err))
+	}
+
+	for _, result := range results {
+		if result.name == "" || result.err != nil {
 			continue
 		}
 		merged = mergeAutoFPIPInfo(merged, result.response)
@@ -568,7 +586,7 @@ func fetchIP234FingerprintProfile(proxy string) (autoFPIPInfoResponse, error) {
 	return result, nil
 }
 
-func fetchIPAPIFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, error) {
+func fetchIPAPIFingerprintProfile(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 	type response struct {
 		Status      string  `json:"status"`
 		Query       string  `json:"query"`
@@ -585,7 +603,7 @@ func fetchIPAPIFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, er
 	}
 
 	var result response
-	if err := fetchAutoFPJSON(client, autoFPIPAPIURL, &result); err != nil {
+	if err := fetchAutoFPJSON(ctx, client, autoFPIPAPIURL, &result); err != nil {
 		return autoFPIPInfoResponse{}, err
 	}
 	if !strings.EqualFold(strings.TrimSpace(result.Status), "success") {
@@ -609,7 +627,7 @@ func fetchIPAPIFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, er
 	}, nil
 }
 
-func fetchIPAPICOFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, error) {
+func fetchIPAPICOFingerprintProfile(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 	type response struct {
 		IP          string  `json:"ip"`
 		City        string  `json:"city"`
@@ -623,7 +641,7 @@ func fetchIPAPICOFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, 
 	}
 
 	var result response
-	if err := fetchAutoFPJSON(client, autoFPIPAPICOURL, &result); err != nil {
+	if err := fetchAutoFPJSON(ctx, client, autoFPIPAPICOURL, &result); err != nil {
 		return autoFPIPInfoResponse{}, err
 	}
 	return autoFPIPInfoResponse{
@@ -636,7 +654,7 @@ func fetchIPAPICOFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, 
 	}, nil
 }
 
-func fetchIPWhoIsFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, error) {
+func fetchIPWhoIsFingerprintProfile(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 	type timezoneResponse struct {
 		ID string `json:"id"`
 	}
@@ -652,7 +670,7 @@ func fetchIPWhoIsFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, 
 	}
 
 	var result response
-	if err := fetchAutoFPJSON(client, autoFPIPWhoIsURL, &result); err != nil {
+	if err := fetchAutoFPJSON(ctx, client, autoFPIPWhoIsURL, &result); err != nil {
 		return autoFPIPInfoResponse{}, err
 	}
 	if !result.Success {
@@ -672,7 +690,7 @@ func fetchIPWhoIsFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, 
 	}, nil
 }
 
-func fetchIPInfoFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, error) {
+func fetchIPInfoFingerprintProfile(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 	type response struct {
 		IP       string `json:"ip"`
 		City     string `json:"city"`
@@ -682,7 +700,7 @@ func fetchIPInfoFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, e
 	}
 
 	var result response
-	if err := fetchAutoFPJSON(client, autoFPIPInfoIOURL, &result); err != nil {
+	if err := fetchAutoFPJSON(ctx, client, autoFPIPInfoIOURL, &result); err != nil {
 		return autoFPIPInfoResponse{}, err
 	}
 	return autoFPIPInfoResponse{
@@ -695,7 +713,7 @@ func fetchIPInfoFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, e
 	}, nil
 }
 
-func fetchFreeIPAPIFingerprintProfile(client *http.Client) (autoFPIPInfoResponse, error) {
+func fetchFreeIPAPIFingerprintProfile(ctx context.Context, client *http.Client) (autoFPIPInfoResponse, error) {
 	type response struct {
 		IPAddress   string   `json:"ipAddress"`
 		CityName    string   `json:"cityName"`
@@ -706,7 +724,7 @@ func fetchFreeIPAPIFingerprintProfile(client *http.Client) (autoFPIPInfoResponse
 	}
 
 	var result response
-	if err := fetchAutoFPJSON(client, autoFPFreeIPAPIURL, &result); err != nil {
+	if err := fetchAutoFPJSON(ctx, client, autoFPFreeIPAPIURL, &result); err != nil {
 		return autoFPIPInfoResponse{}, err
 	}
 	timezone := ""
@@ -723,11 +741,14 @@ func fetchFreeIPAPIFingerprintProfile(client *http.Client) (autoFPIPInfoResponse
 	}, nil
 }
 
-func fetchAutoFPJSON(client *http.Client, endpoint string, target any) error {
-	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+func fetchAutoFPJSON(ctx context.Context, client *http.Client, endpoint string, target any) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if client == nil {
+		client = &http.Client{Timeout: autoFPIPInfoRequestTimeout}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return err
 	}

@@ -26,7 +26,7 @@
 
 - `Intercept().StartRequests()` 的事件订阅改为全局接收后按 intercept id 精确过滤，避免 Firefox + BiDi network intercept 下被暂停请求因 network 事件缺少稳定 context 而漏放行
 - 网络拦截回调与 Python 版保持一致：全局接收 `network.*` 事件，再只处理当前 intercept 的暂停请求
-- `WithAutoFPFile()` 的自动指纹 IP 信息改为 **多源并发请求 + 固定顺序合并**，请求更快，结果不受返回时序影响
+- `WithAutoFPFile()` 的自动指纹 IP 信息改为 **多源并发请求 + 最快可用结果优先**：哪个数据源最快返回且能通过 `normalizeAutoFPIPInfo()` 校验，就立即使用并取消剩余请求
 - `WithAutoFPFile()` 已补充更完整的全球国家/地区映射；遇到合法 `country_code` 但没有独立 profile 时，会自动降级到可用语言模板
 - 多 Tab `Listen()` / `Intercept()` 已改为 tab 级隔离，一个 tab 的 `Stop()` 或关闭不会影响其他 tab
 - `AutoPortEnabled(true)` 已修复并发启动时的端口冲突和 page cache 提前复用问题，不手动写 `WithAddress(...)` 也能启动多个独立实例
@@ -48,12 +48,12 @@
 
 ## 更新到最新版本
 
-当前推荐版本：`v1.1.13`
+当前推荐版本：`v1.1.14`
 
 新安装、老项目升级都统一执行这一组命令：
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.13
+go get github.com/pll177/ruyipage-go@v1.1.14
 go mod tidy
 ```
 
@@ -61,7 +61,7 @@ go mod tidy
 
 - 不再推荐依赖 `@latest`
 - 新安装和升级都直接显式写 `@当前版本`
-- 后续每次发布都会递增小版本号，例如 `v1.1.13`、`v1.1.14`
+- 后续每次发布都会递增小版本号，例如 `v1.1.14`、`v1.1.15`
 - 看到 README 里的版本号变了，直接把命令里的版本号同步替换即可
 
 ---
@@ -147,7 +147,7 @@ opts.WithProxy("http://proxy.example.com:7878")
 ### 安装
 
 ```bash
-go get github.com/pll177/ruyipage-go@v1.1.13
+go get github.com/pll177/ruyipage-go@v1.1.14
 go mod tidy
 ```
 
