@@ -351,10 +351,36 @@ func main() {
 ### 全局 Settings
 
 `ruyipage.Settings` 提供全局默认行为和超时基线，适合在程序启动阶段统一配置。
+这些设置会影响之后创建的页面、Tab、监听器和拦截器；建议在 `NewFirefoxPage()` / `NewFirefox()` 之前设置。
 
 ```go
 ruyipage.Settings.PageLoadTimeout = 60
 ruyipage.Settings.ScriptTimeout = 30
+```
+
+常用字段说明：
+
+| 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `RaiseWhenEleNotFound` | `false` | 查找元素失败时是否直接返回错误；默认返回空元素风格对象，方便链式兼容处理。 |
+| `RaiseWhenClickFailed` | `false` | 点击失败时是否直接返回错误；默认尽量兼容执行，由调用方决定是否中断。 |
+| `RaiseWhenWaitFailed` | `false` | 等待条件超时时是否直接返回错误；默认把等待失败作为普通结果处理。 |
+| `SingletonTabObj` | `true` | 同一个浏览上下文是否复用同一个 Tab/Page 对象；开启后同一 tab 的对象引用更稳定。 |
+| `BiDiTimeout` | `30` | 单次 WebDriver BiDi 协议命令默认超时，单位秒。 |
+| `BrowserConnectTimeout` | `30` | 启动或接管 Firefox 时连接 BiDi 调试端口的超时，单位秒。 |
+| `ElementFindTimeout` | `10` | 查找元素的默认等待时间，单位秒。 |
+| `PageLoadTimeout` | `30` | 页面跳转、加载类操作的默认超时，单位秒。 |
+| `ScriptTimeout` | `30` | 执行 JavaScript 的默认超时，单位秒。 |
+| `InterceptCompleteGraceTimeout` | `3` | 开启拦截后 `Navigate(url, "complete")` 在 `interactive` 后继续等待 `complete` 的时间，单位秒。 |
+| `InterceptCompleteStopLoading` | `true` | 上述等待仍未 `complete` 时，是否调用 `window.stop()` 收掉尾部持续请求，避免浏览器一直转圈。 |
+
+如果要临时修改后恢复，可以保存快照：
+
+```go
+snapshot := ruyipage.Settings.Snapshot()
+defer ruyipage.Settings.Restore(snapshot)
+
+ruyipage.Settings.PageLoadTimeout = 60
 ```
 
 #### Intercept + complete 加载收尾
