@@ -269,7 +269,7 @@ func (r *InterceptedRequest) loadBody() string {
 	if body, ok := decodeNetworkBodyValue(r.Raw["body"]); ok {
 		return body
 	}
-	return loadCollectedBody(r.collector, r.RequestID, "request", 1, 0)
+	return ""
 }
 
 func (r *InterceptedRequest) loadResponseBody() string {
@@ -279,10 +279,17 @@ func (r *InterceptedRequest) loadResponseBody() string {
 	if body, ok := decodeNetworkBodyValue(r.Response["body"]); ok {
 		return body
 	}
-	return loadCollectedBody(r.responseCollector, r.RequestID, "response", 10, 300*time.Millisecond)
+	return loadCollectedBody(r.responseCollector, r.RequestID, "response", 10, 300*time.Millisecond, 500*time.Millisecond)
 }
 
-func loadCollectedBody(collector *DataCollector, requestID string, dataType string, attempts int, delay time.Duration) string {
+func loadCollectedBody(
+	collector *DataCollector,
+	requestID string,
+	dataType string,
+	attempts int,
+	delay time.Duration,
+	timeout time.Duration,
+) string {
 	if collector == nil || requestID == "" {
 		return ""
 	}
@@ -290,7 +297,7 @@ func loadCollectedBody(collector *DataCollector, requestID string, dataType stri
 		attempts = 1
 	}
 	for attempt := 0; attempt < attempts; attempt++ {
-		data, err := collector.Get(requestID, dataType)
+		data, err := collector.getWithTimeout(requestID, dataType, timeout)
 		if err == nil && data != nil {
 			if body, ok := decodeNetworkBodyValue(data.Bytes); ok {
 				return body
@@ -607,8 +614,33 @@ func (i *Interceptor) isActive() bool {
 	return i.active
 }
 
+func (i *Interceptor) matchesIntercept(params map[string]any) bool {
+	if i == nil {
+		return false
+	}
+	i.mu.RLock()
+	interceptID := i.interceptID
+	i.mu.RUnlock()
+	if interceptID == "" {
+		return true
+	}
+	intercepts, _ := params["intercepts"].([]any)
+	if len(intercepts) == 0 {
+		return true
+	}
+	for _, value := range intercepts {
+		if stringifyNetworkValue(value) == interceptID {
+			return true
+		}
+	}
+	return false
+}
+
 func (i *Interceptor) onIntercept(params map[string]any) {
 	if !i.isActive() {
+		return
+	}
+	if !i.matchesIntercept(params) {
 		return
 	}
 	req := NewInterceptedRequest(
@@ -619,10 +651,7 @@ func (i *Interceptor) onIntercept(params map[string]any) {
 		i.resolveTimeout(),
 	)
 	if handler := i.currentHandler(); handler != nil {
-		safeRunInterceptHandler(handler, req)
-		if !req.Handled() {
-			_ = req.ContinueRequest("", "", nil, nil)
-		}
+		go handleRequestIntercept(handler, req)
 		return
 	}
 	i.queue.Push(req)
@@ -632,6 +661,9 @@ func (i *Interceptor) onResponseIntercept(params map[string]any) {
 	if !i.isActive() {
 		return
 	}
+	if !i.matchesIntercept(params) {
+		return
+	}
 	req := NewInterceptedRequest(
 		params,
 		i.owner.BrowserDriver(),
@@ -640,10 +672,7 @@ func (i *Interceptor) onResponseIntercept(params map[string]any) {
 		i.resolveTimeout(),
 	)
 	if handler := i.currentHandler(); handler != nil {
-		safeRunInterceptHandler(handler, req)
-		if !req.Handled() {
-			_ = req.ContinueResponse(nil, "", nil)
-		}
+		go i.handleResponseIntercept(handler, req)
 		return
 	}
 	i.queue.Push(req)
@@ -653,6 +682,9 @@ func (i *Interceptor) onAuth(params map[string]any) {
 	if !i.isActive() {
 		return
 	}
+	if !i.matchesIntercept(params) {
+		return
+	}
 	req := NewInterceptedRequest(
 		params,
 		i.owner.BrowserDriver(),
@@ -661,13 +693,31 @@ func (i *Interceptor) onAuth(params map[string]any) {
 		i.resolveTimeout(),
 	)
 	if handler := i.currentHandler(); handler != nil {
-		safeRunInterceptHandler(handler, req)
-		if !req.Handled() {
-			_ = req.ContinueWithAuth("default", "", "")
-		}
+		go i.handleAuthIntercept(handler, req)
 		return
 	}
 	i.queue.Push(req)
+}
+
+func handleRequestIntercept(handler func(*InterceptedRequest), req *InterceptedRequest) {
+	safeRunInterceptHandler(handler, req)
+	if !req.Handled() {
+		_ = req.ContinueRequest("", "", nil, nil)
+	}
+}
+
+func (i *Interceptor) handleResponseIntercept(handler func(*InterceptedRequest), req *InterceptedRequest) {
+	safeRunInterceptHandler(handler, req)
+	if !req.Handled() {
+		_ = req.ContinueResponse(nil, "", nil)
+	}
+}
+
+func (i *Interceptor) handleAuthIntercept(handler func(*InterceptedRequest), req *InterceptedRequest) {
+	safeRunInterceptHandler(handler, req)
+	if !req.Handled() {
+		_ = req.ContinueWithAuth("default", "", "")
+	}
 }
 
 func safeRunInterceptHandler(handler func(*InterceptedRequest), req *InterceptedRequest) {

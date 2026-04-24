@@ -11,20 +11,29 @@ type SettingsValues struct {
 	ElementFindTimeout    float64
 	PageLoadTimeout       float64
 	ScriptTimeout         float64
+	// InterceptCompleteGraceTimeout 是 Intercept 开启时 Navigate(..., "complete")
+	// 在 interactive 后继续等待 document.readyState=complete 的秒数。
+	// 小于等于 0 表示不额外等待。
+	InterceptCompleteGraceTimeout float64
+	// InterceptCompleteStopLoading 控制上述等待超时后是否调用 window.stop()
+	// 收掉持续加载请求，避免浏览器加载指示器一直转。
+	InterceptCompleteStopLoading bool
 }
 
 // DefaultSettingsValues 返回与 Python 版对齐的默认设置快照。
 func DefaultSettingsValues() SettingsValues {
 	return SettingsValues{
-		RaiseWhenEleNotFound:  false,
-		RaiseWhenClickFailed:  false,
-		RaiseWhenWaitFailed:   false,
-		SingletonTabObj:       true,
-		BiDiTimeout:           DefaultBiDiTimeoutSeconds,
-		BrowserConnectTimeout: DefaultBrowserConnectTimeoutSeconds,
-		ElementFindTimeout:    DefaultElementFindTimeoutSeconds,
-		PageLoadTimeout:       DefaultPageLoadTimeoutSeconds,
-		ScriptTimeout:         DefaultScriptTimeoutSeconds,
+		RaiseWhenEleNotFound:          false,
+		RaiseWhenClickFailed:          false,
+		RaiseWhenWaitFailed:           false,
+		SingletonTabObj:               true,
+		BiDiTimeout:                   DefaultBiDiTimeoutSeconds,
+		BrowserConnectTimeout:         DefaultBrowserConnectTimeoutSeconds,
+		ElementFindTimeout:            DefaultElementFindTimeoutSeconds,
+		PageLoadTimeout:               DefaultPageLoadTimeoutSeconds,
+		ScriptTimeout:                 DefaultScriptTimeoutSeconds,
+		InterceptCompleteGraceTimeout: 3,
+		InterceptCompleteStopLoading:  true,
 	}
 }
 

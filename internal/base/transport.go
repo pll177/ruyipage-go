@@ -15,7 +15,6 @@ import (
 const (
 	defaultTransportConnectTimeout = time.Duration(support.DefaultBrowserConnectTimeoutSeconds) * time.Second
 	defaultTransportRequestTimeout = 30 * time.Second
-	defaultTransportEventBuffer    = 64
 )
 
 // TransportEvent 表示 Transport 收到的异步 BiDi 事件。
@@ -85,20 +84,68 @@ type BiDiTransport struct {
 	closeErr     error
 	shutdownOnce sync.Once
 	done         chan struct{}
-	eventQueue   chan TransportEvent
+	eventBuf     *transportEventBuffer
 
 	recvWG  sync.WaitGroup
 	eventWG sync.WaitGroup
 }
 
+// transportEventBuffer 是一个无界的 BiDi 事件队列；Push 永不阻塞 recvLoop，
+// 避免下游 handler 短时处理不过来时，把命令响应投递链一起卡死。
+type transportEventBuffer struct {
+	mu     sync.Mutex
+	cond   *sync.Cond
+	items  []TransportEvent
+	closed bool
+}
+
+func newTransportEventBuffer() *transportEventBuffer {
+	b := &transportEventBuffer{}
+	b.cond = sync.NewCond(&b.mu)
+	return b
+}
+
+func (b *transportEventBuffer) Push(event TransportEvent) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		return false
+	}
+	b.items = append(b.items, event)
+	b.cond.Signal()
+	return true
+}
+
+func (b *transportEventBuffer) Pop() (TransportEvent, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for len(b.items) == 0 && !b.closed {
+		b.cond.Wait()
+	}
+	if len(b.items) == 0 {
+		return TransportEvent{}, false
+	}
+	event := b.items[0]
+	b.items[0] = TransportEvent{}
+	b.items = b.items[1:]
+	return event, true
+}
+
+func (b *transportEventBuffer) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.closed = true
+	b.cond.Broadcast()
+}
+
 // NewBiDiTransport 创建一个新的 BiDi WebSocket 传输层实例。
 func NewBiDiTransport(wsURL string) *BiDiTransport {
 	return &BiDiTransport{
-		wsURL:      wsURL,
-		dial:       dialWebsocket,
-		pending:    make(map[int64]chan transportResult),
-		done:       make(chan struct{}),
-		eventQueue: make(chan TransportEvent, defaultTransportEventBuffer),
+		wsURL:    wsURL,
+		dial:     dialWebsocket,
+		pending:  make(map[int64]chan transportResult),
+		done:     make(chan struct{}),
+		eventBuf: newTransportEventBuffer(),
 	}
 }
 
@@ -266,19 +313,11 @@ func (t *BiDiTransport) eventLoop() {
 	defer t.eventWG.Done()
 
 	for {
-		select {
-		case event := <-t.eventQueue:
-			t.dispatchEvent(event)
-		case <-t.done:
-			for {
-				select {
-				case event := <-t.eventQueue:
-					t.dispatchEvent(event)
-				default:
-					return
-				}
-			}
+		event, ok := t.eventBuf.Pop()
+		if !ok {
+			return
 		}
+		t.dispatchEvent(event)
 	}
 }
 
@@ -315,11 +354,10 @@ func (t *BiDiTransport) handleResponse(commandID int64, response transportEnvelo
 }
 
 func (t *BiDiTransport) enqueueEvent(event TransportEvent) {
-	select {
-	case <-t.done:
+	if t.isClosed() {
 		return
-	case t.eventQueue <- event:
 	}
+	t.eventBuf.Push(event)
 }
 
 func (t *BiDiTransport) registerPending(commandID int64, responseCh chan transportResult) error {
@@ -373,6 +411,9 @@ func (t *BiDiTransport) shutdown(reason error, notifyDisconnect bool) {
 
 		close(t.done)
 		t.failPending(reason)
+		if t.eventBuf != nil {
+			t.eventBuf.Close()
+		}
 
 		if conn != nil {
 			_ = conn.Close()

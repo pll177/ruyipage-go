@@ -53,10 +53,14 @@ type DataCollector struct {
 
 // Get 读取指定请求的数据。
 func (c *DataCollector) Get(requestID string, dataType string) (*NetworkData, error) {
+	return c.getWithTimeout(requestID, dataType, 0)
+}
+
+func (c *DataCollector) getWithTimeout(requestID string, dataType string, timeout time.Duration) (*NetworkData, error) {
 	if c == nil || c.manager == nil {
 		return NewNetworkData(nil), nil
 	}
-	return c.manager.GetData(c.ID, requestID, dataType)
+	return c.manager.getDataWithTimeout(c.ID, requestID, dataType, timeout)
 }
 
 // Disown 释放指定请求的数据。
@@ -160,10 +164,17 @@ func (m *NetworkManager) RemoveDataCollector(collectorID string) error {
 
 // GetData 读取指定 collector 中的数据。
 func (m *NetworkManager) GetData(collectorID string, requestID string, dataType string) (*NetworkData, error) {
+	return m.getDataWithTimeout(collectorID, requestID, dataType, 0)
+}
+
+func (m *NetworkManager) getDataWithTimeout(collectorID string, requestID string, dataType string, timeout time.Duration) (*NetworkData, error) {
 	if m == nil || m.owner == nil {
 		return NewNetworkData(nil), nil
 	}
-	result, err := bidi.GetData(m.owner.BrowserDriver(), collectorID, requestID, dataType, m.resolveTimeout())
+	if timeout <= 0 {
+		timeout = m.resolveTimeout()
+	}
+	result, err := bidi.GetData(m.owner.BrowserDriver(), collectorID, requestID, dataType, timeout)
 	if err != nil {
 		return nil, err
 	}

@@ -239,6 +239,12 @@ func (e *EventEmitter) snapshot(event string, context string) ([]*EventSubscript
 	if context != "" {
 		globalRoute := eventRoute{event: event, context: ""}
 		subscriptions = appendSubscriptions(subscriptions, e.routes[globalRoute])
+	} else {
+		for route, routeSubscriptions := range e.routes {
+			if route.event == event && route.context != "" {
+				subscriptions = appendSubscriptions(subscriptions, routeSubscriptions)
+			}
+		}
 	}
 
 	sort.Slice(subscriptions, func(i, j int) bool {

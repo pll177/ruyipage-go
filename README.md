@@ -24,6 +24,9 @@
 
 ## v1 最新修复汇总
 
+- `Intercept().StartRequests()` 配合 `Navigate(url, "complete")` 已加入通用兼容策略：避免 Firefox + BiDi network intercept 下页面可用但 load/complete 长时间不收口导致超时
+- 网络拦截回调改为并发处理；请求放行仍等待 BiDi ack，既避免事件派发线程被阻塞，也不会吞掉 `network.continueRequest` 的协议错误
+- `Navigate(..., "complete")` 在拦截开启时支持 `Settings.InterceptCompleteGraceTimeout` 与 `Settings.InterceptCompleteStopLoading`，可按业务调整尾部持续请求的收尾策略
 - `WithAutoFPFile()` 的自动指纹 IP 信息改为 **多源并发请求 + 固定顺序合并**，请求更快，结果不受返回时序影响
 - `WithAutoFPFile()` 已补充更完整的全球国家/地区映射；遇到合法 `country_code` 但没有独立 profile 时，会自动降级到可用语言模板
 - 多 Tab `Listen()` / `Intercept()` 已改为 tab 级隔离，一个 tab 的 `Stop()` 或关闭不会影响其他 tab
@@ -35,10 +38,12 @@
 - 合法国家码不再频繁因为缺少专属 profile 直接失败
 - 多 tab 网络监听/拦截互不干扰
 - 同一 Go 进程内并发启动多个 Firefox 实例时，不会再错误复用到同一个浏览器
+- 拦截开启后访问重资源页面时，`Navigate(..., "complete")` 不再因为尾部统计、广告或持续请求一直挂住
 
 相关验证示例：
 
 - `examples/46_multi_tab_listener_isolation`
+- `examples/40_1_request_header_capture`
 
 ---
 
@@ -342,6 +347,43 @@ func main() {
 | `Port` | 调试端口 |
 | `WindowWidth` / `WindowHeight` | 启动窗口大小 |
 | `TimeoutBase` / `TimeoutPageLoad` / `TimeoutScript` | 三类超时，单位秒 |
+
+### 全局 Settings
+
+`ruyipage.Settings` 提供全局默认行为和超时基线，适合在程序启动阶段统一配置。
+
+```go
+ruyipage.Settings.PageLoadTimeout = 60
+ruyipage.Settings.ScriptTimeout = 30
+```
+
+#### Intercept + complete 加载收尾
+
+Firefox 的 WebDriver BiDi 在开启 `network.addIntercept` 后，部分页面会出现“主体已可用，但尾部统计、广告或持续请求让 `complete` 一直不收口”的情况。  
+因此，当 `Intercept()` 处于 active 状态且调用 `Navigate(url, "complete")` 时，框架会使用通用兼容策略：
+
+1. 底层导航先等待 `interactive`
+2. 再继续等待 `document.readyState == "complete"`，等待时长由 `InterceptCompleteGraceTimeout` 控制
+3. 如果仍未 complete，且 `InterceptCompleteStopLoading` 为 `true`，调用 `window.stop()` 收掉尾部持续加载
+
+默认配置：
+
+```go
+ruyipage.Settings.InterceptCompleteGraceTimeout = 3
+ruyipage.Settings.InterceptCompleteStopLoading = true
+```
+
+如果业务页接口较慢，可以调大 grace：
+
+```go
+ruyipage.Settings.InterceptCompleteGraceTimeout = 10
+```
+
+如果你希望完全保留浏览器原始加载状态，不让框架主动停止尾部请求：
+
+```go
+ruyipage.Settings.InterceptCompleteStopLoading = false
+```
 
 ### 开启隐私模式
 
@@ -933,6 +975,12 @@ if err != nil {
 }
 defer page.Intercept().Stop()
 ```
+
+注意：
+
+- 回调模式下每个 `InterceptedRequest` 会并发处理，避免单个请求阻塞后续拦截事件。
+- 如果请求未被用户显式处理，框架会兜底 `ContinueRequest()`。
+- 开启拦截后再使用 `Navigate(url, "complete")` 时，会启用上文的 `Intercept + complete` 通用收尾策略，避免尾部持续请求导致浏览器一直转圈。
 
 ### `page.Network()` 高层能力
 

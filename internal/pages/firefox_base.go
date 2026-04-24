@@ -538,12 +538,27 @@ func (p *FirefoxBase) Navigate(targetURL string, wait string) error {
 	if wait == "" {
 		wait = loadModeWait(p.loadMode)
 	}
+	navigateWait := wait
+	interceptCompleteMode := false
+	if wait == "complete" && p.interceptActive() {
+		navigateWait = "interactive"
+		interceptCompleteMode = true
+	}
 	p.setLoadingState("loading", true)
-	_, navigateErr := bidi.Navigate(p.browserDriver(), p.ContextID(), targetURL, wait, p.pageLoadTimeout())
+	_, navigateErr := bidi.Navigate(p.browserDriver(), p.ContextID(), targetURL, navigateWait, p.pageLoadTimeout())
 	if navigateErr != nil && !isExpectedNavigationAbort(navigateErr) {
 		return navigateErr
 	}
-	if navigateErr == nil && wait != "none" {
+	if navigateErr == nil && interceptCompleteMode {
+		if grace := interceptCompleteGraceTimeout(p.pageLoadTimeout()); grace > 0 {
+			if err := p.WaitLoadComplete(grace); err != nil && support.Settings.InterceptCompleteStopLoading {
+				_, _ = p.RunJS("window.stop()")
+			}
+		} else if support.Settings.InterceptCompleteStopLoading {
+			_, _ = p.RunJS("window.stop()")
+		}
+		_, _ = p.ReadyState()
+	} else if navigateErr == nil && wait != "none" {
 		_, _ = p.ReadyState()
 	}
 	_ = p.reinjectXPathPickerIfNeeded()
@@ -553,6 +568,31 @@ func (p *FirefoxBase) Navigate(targetURL string, wait string) error {
 
 func (p *FirefoxBase) Get(targetURL string) error {
 	return p.Navigate(targetURL, "")
+}
+
+func (p *FirefoxBase) interceptActive() bool {
+	if p == nil {
+		return false
+	}
+	p.mu.RLock()
+	intercept := p.intercept
+	p.mu.RUnlock()
+	return intercept != nil && intercept.Active()
+}
+
+func interceptCompleteGraceTimeout(timeout time.Duration) time.Duration {
+	seconds := support.Settings.InterceptCompleteGraceTimeout
+	if seconds <= 0 {
+		return 0
+	}
+	grace := time.Duration(seconds * float64(time.Second))
+	if grace <= 0 {
+		return 0
+	}
+	if timeout > 0 && timeout < grace {
+		return timeout
+	}
+	return grace
 }
 
 func (p *FirefoxBase) Activate() error {
